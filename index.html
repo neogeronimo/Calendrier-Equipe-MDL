@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=031" />
+  <link rel="stylesheet" href="styles.css?v=032" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -23,7 +23,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.3.1 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.3.2 · prête.</div>
     </section>
   </main>
 
@@ -148,8 +148,8 @@
     </section>
   </div>
 
-  <dialog id="eventDialog">
-    <form id="eventForm" class="stack dialog-card wide-dialog">
+  <dialog id="eventDialog" class="wide">
+    <form id="eventForm" class="stack dialog-card">
       <div class="dialog-title-row">
         <div><p class="eyebrow">Calendrier</p><h2 id="eventDialogTitle">Nouveau rendez-vous</h2></div>
         <button type="button" id="closeEventDialogBtn" class="icon-btn" aria-label="Fermer">×</button>
@@ -192,7 +192,7 @@
 
 
   <dialog id="userDialog" class="wide">
-    <form id="userForm" class="stack dialog-card wide-dialog">
+    <form id="userForm" class="stack dialog-card">
       <div class="dialog-title-row">
         <div><p class="eyebrow">Administration</p><h2 id="userDialogTitle">Nouvel utilisateur</h2></div>
         <button type="button" id="closeUserDialogBtn" class="icon-btn" aria-label="Fermer">×</button>
@@ -241,7 +241,7 @@
   </dialog>
 
   <dialog id="deleteUserDialog" class="wide">
-    <div class="stack dialog-card wide-dialog">
+    <div class="stack dialog-card">
       <div class="dialog-title-row">
         <div><p class="eyebrow">Suppression sécurisée</p><h2>Archiver puis supprimer</h2></div>
         <button type="button" id="closeDeleteUserDialogBtn" class="icon-btn" aria-label="Fermer">×</button>
@@ -268,6 +268,6 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=031"></script>
+  <script type="module" src="app.js?v=032"></script>
 </body>
 </html>

@@ -5,3 +5,46 @@
 
 .admin-note{margin:3px 0 0}.user-filters{display:grid;grid-template-columns:minmax(180px,1fr) 180px 160px;gap:10px;margin-bottom:14px}.user-row{padding:15px}.user-identity{display:grid;gap:5px;min-width:0}.user-badges{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0}.badge-muted{background:#eef0f4;color:#737684}.user-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.user-actions button{min-height:38px}.password-row{display:grid;grid-template-columns:1fr auto;gap:8px}.tiny{font-size:.78rem;margin:-8px 0 0}.group-fieldset{border:1px solid var(--border);border-radius:16px;padding:12px}.group-fieldset legend{font-weight:800;padding:0 6px}.compact-check-list{grid-template-columns:repeat(2,minmax(0,1fr))}.archive-summary{padding:14px 16px;border-radius:14px;background:var(--primary-soft)}.archive-summary p{margin:8px 0 0}.archive-step{display:grid;grid-template-columns:38px 1fr auto;gap:12px;align-items:center;border:1px solid var(--border);border-radius:16px;padding:14px}.archive-step p{margin:4px 0 0;color:var(--muted);font-size:.88rem}.step-number{width:34px;height:34px;display:grid;place-items:center;border-radius:999px;background:var(--primary);color:#fff;font-weight:900}button:disabled{opacity:.45;cursor:not-allowed}
 @media (max-width:760px){.user-filters{grid-template-columns:1fr}.user-actions{width:100%;justify-content:stretch}.user-actions button{flex:1 1 100%}.compact-check-list{grid-template-columns:1fr}.password-row{grid-template-columns:1fr}.archive-step{grid-template-columns:38px 1fr}.archive-step button{grid-column:1/-1;width:100%}}
+
+
+/* v0.3.2 — dialogues réellement responsives */
+dialog{
+  max-width:calc(100vw - 24px);
+  max-height:calc(100dvh - 24px);
+  overflow:auto;
+}
+dialog.wide{
+  width:min(680px,calc(100vw - 24px));
+}
+dialog > .dialog-card,
+dialog > form.dialog-card{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+}
+.dialog-card > *,
+.two-cols > *,
+.password-row > *,
+.dialog-title-row > *{
+  min-width:0;
+}
+input,select,textarea{
+  min-width:0;
+}
+@media (max-width:760px){
+  dialog,
+  dialog.wide{
+    width:calc(100vw - 20px);
+    max-width:calc(100vw - 20px);
+    margin:auto;
+  }
+  .dialog-card{
+    padding:16px;
+  }
+  .dialog-title-row{
+    align-items:flex-start;
+  }
+  .dialog-title-row h2{
+    overflow-wrap:anywhere;
+  }
+}

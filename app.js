@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=031';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=032';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -23,7 +23,7 @@ let archiveReadyForUserId = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.3.1 · ${message}`;
+  if (box) box.textContent = `Version 0.3.2 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -261,17 +261,18 @@ async function loadAdmin() {
   if(!roleCanManageUsers()) return;
 
   const {data: users, error: usersError} = await supabase.rpc('manager_list_profiles');
+
   if(usersError){
     $('usersList').innerHTML=`<div class="error">${escapeHtml(usersError.message)}</div>`;
-    return;
+  } else {
+    adminProfiles = users || [];
   }
-  adminProfiles = users || [];
 
   $('groupsList').innerHTML=groups.length
     ? groups.map(g=>`<div class="list-row"><div class="row-main"><strong>${escapeHtml(g.name)}</strong><span class="badge">${g.is_active?'Actif':'Inactif'}</span></div>${g.description?`<div class="muted">${escapeHtml(g.description)}</div>`:''}</div>`).join('')
     : '<div class="empty">Aucun groupe.</div>';
 
-  renderAdminUsers();
+  if(!usersError) renderAdminUsers();
 }
 
 function renderAdminUsers() {
@@ -563,7 +564,19 @@ $('closeDeleteUserDialogBtn').addEventListener('click',()=>$('deleteUserDialog')
 $('cancelDeleteUserBtn').addEventListener('click',()=>$('deleteUserDialog').close());
 
 $('addGroupBtn').addEventListener('click',()=>{$('groupName').value='';$('groupDescription').value='';$('groupDialog').showModal();});
-$('groupForm').addEventListener('submit',async e=>{if(e.submitter?.value==='cancel')return;e.preventDefault();const name=$('groupName').value.trim();if(!name)return;const {error}=await supabase.rpc('manager_create_group',{new_name:name,new_description:$('groupDescription').value.trim()||null});if(error){showToast(error.message,5000);return;}$('groupDialog').close();await loadReferenceData();await loadAdmin();showToast('Groupe créé.');});
+$('groupForm').addEventListener('submit',async e=>{
+  if(e.submitter?.value==='cancel')return;
+  e.preventDefault();
+  const name=$('groupName').value.trim();
+  if(!name){showToast('Le nom du groupe est obligatoire.',5000);return;}
+  const description=$('groupDescription').value.trim()||null;
+  const {error}=await supabase.rpc('manager_create_group',{new_name:name,new_description:description});
+  if(error){showToast(`Création du groupe impossible : ${error.message}`,7000);return;}
+  $('groupDialog').close();
+  await loadReferenceData();
+  await loadAdmin();
+  showToast('Groupe créé.');
+});
 document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','adminPanel'].forEach(id=>$(id).hidden=true);currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team')renderTeamUsers();if(currentMainView==='admin')await loadAdmin();}));
 
 bootstrap();
