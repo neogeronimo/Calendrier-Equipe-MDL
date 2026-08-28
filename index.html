@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=020" />
+  <link rel="stylesheet" href="styles.css?v=030" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -23,7 +23,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.2.0 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.3.0 · prête.</div>
     </section>
   </main>
 
@@ -123,7 +123,25 @@
           <div id="groupsList" class="simple-list"></div>
         </article>
         <article class="card">
-          <div class="card-head"><h3>Utilisateurs</h3></div>
+          <div class="card-head">
+            <div><h3>Utilisateurs</h3><p class="muted admin-note">Création, désactivation et archivage avant suppression.</p></div>
+            <button id="addUserBtn" class="primary">+ Nouvel utilisateur</button>
+          </div>
+          <div class="user-filters">
+            <input id="userSearch" type="search" placeholder="Rechercher un utilisateur…" />
+            <select id="userRoleFilter">
+              <option value="">Tous les rôles</option>
+              <option value="technicien">Techniciens</option>
+              <option value="planificateur">Planificateurs</option>
+              <option value="responsable">Responsables</option>
+              <option value="administrateur">Administrateurs</option>
+            </select>
+            <select id="userStatusFilter">
+              <option value="">Tous les statuts</option>
+              <option value="active">Actifs</option>
+              <option value="inactive">Désactivés</option>
+            </select>
+          </div>
           <div id="usersList" class="simple-list"></div>
         </article>
       </div>
@@ -172,6 +190,84 @@
     </form>
   </dialog>
 
-  <script type="module" src="app.js?v=020"></script>
+
+  <dialog id="userDialog" class="wide">
+    <form id="userForm" class="stack dialog-card wide-dialog">
+      <div class="dialog-title-row">
+        <div><p class="eyebrow">Administration</p><h2 id="userDialogTitle">Nouvel utilisateur</h2></div>
+        <button type="button" id="closeUserDialogBtn" class="icon-btn" aria-label="Fermer">×</button>
+      </div>
+      <input id="userId" type="hidden" />
+      <div class="two-cols">
+        <label>Prénom<input id="userFirstName" maxlength="80" required /></label>
+        <label>Nom<input id="userLastName" maxlength="80" required /></label>
+      </div>
+      <label>Nom affiché<input id="userDisplayName" maxlength="160" placeholder="Ex. Pascal Dupont" /></label>
+      <label>Adresse e-mail<input id="userEmail" type="email" required /></label>
+      <div id="passwordWrap">
+        <label>Mot de passe temporaire
+          <div class="password-row">
+            <input id="userTempPassword" type="text" minlength="8" autocomplete="off" />
+            <button type="button" id="generatePasswordBtn" class="ghost">Générer</button>
+          </div>
+        </label>
+        <p class="muted tiny">Minimum 8 caractères. Il est affiché uniquement pendant la création.</p>
+      </div>
+      <div class="two-cols">
+        <label>Rôle
+          <select id="userRole">
+            <option value="technicien">Technicien</option>
+            <option value="planificateur">Planificateur</option>
+            <option value="responsable">Responsable</option>
+            <option value="administrateur">Administrateur</option>
+          </select>
+        </label>
+        <label>Groupe principal
+          <select id="userPrimaryGroup"><option value="">Aucun</option></select>
+        </label>
+      </div>
+      <label class="check-line"><input id="userGlobalScope" type="checkbox" /> Accès global aux calendriers</label>
+      <label class="check-line"><input id="userActive" type="checkbox" checked /> Compte actif</label>
+      <fieldset class="group-fieldset">
+        <legend>Groupes</legend>
+        <div id="userGroupsChecks" class="check-list compact-check-list"></div>
+      </fieldset>
+      <p id="userFormError" class="error" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" id="cancelUserBtn" class="ghost">Annuler</button>
+        <button type="submit" class="primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="deleteUserDialog" class="wide">
+    <div class="stack dialog-card wide-dialog">
+      <div class="dialog-title-row">
+        <div><p class="eyebrow">Suppression sécurisée</p><h2>Archiver puis supprimer</h2></div>
+        <button type="button" id="closeDeleteUserDialogBtn" class="icon-btn" aria-label="Fermer">×</button>
+      </div>
+      <div id="deleteUserSummary" class="archive-summary"></div>
+      <div class="archive-step">
+        <span class="step-number">1</span>
+        <div>
+          <strong>Créer l’archive Excel</strong>
+          <p>Le classeur contient les informations de l’utilisateur et son historique de calendrier.</p>
+        </div>
+        <button id="archiveUserBtn" class="primary">Exporter Excel</button>
+      </div>
+      <div class="archive-step">
+        <span class="step-number">2</span>
+        <div>
+          <strong>Suppression définitive</strong>
+          <p>Disponible uniquement après génération de l’archive pendant cette opération.</p>
+        </div>
+        <button id="confirmDeleteUserBtn" class="danger-btn" disabled>Supprimer définitivement</button>
+      </div>
+      <p id="deleteUserError" class="error" hidden></p>
+      <div class="dialog-actions"><button id="cancelDeleteUserBtn" class="ghost">Fermer</button></div>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.js?v=030"></script>
 </body>
 </html>

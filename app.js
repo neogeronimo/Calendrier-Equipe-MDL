@@ -1,5 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=020';
+import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=030';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -16,10 +17,13 @@ let events = [];
 let calendarView = 'week';
 let cursorDate = startOfDay(new Date());
 let currentMainView = 'agenda';
+let adminProfiles = [];
+let deleteTarget = null;
+let archiveReadyForUserId = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.2.0 · ${message}`;
+  if (box) box.textContent = `Version 0.3.0 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -54,6 +58,8 @@ function fmtTime(d) { return new Intl.DateTimeFormat('fr-FR',{hour:'2-digit',min
 function eventColor(ev) { return eventTypes.find(t=>t.id===ev.event_type_id)?.color || '#5b4fd6'; }
 function profileName(p) { return p?.display_name || [p?.first_name,p?.last_name].filter(Boolean).join(' ') || 'Utilisateur'; }
 function roleCanManageTeam() { return ['planificateur','responsable','administrateur'].includes(currentProfile?.role); }
+function roleCanManageUsers() { return ['responsable','administrateur'].includes(currentProfile?.role); }
+function isAdmin() { return currentProfile?.role === 'administrateur'; }
 
 async function loadProfile(userId) {
   const { data, error } = await withTimeout(
@@ -87,7 +93,7 @@ function showAppShell() {
   $('loginView').hidden = true; $('appView').hidden = false;
   const first = currentProfile?.first_name?.trim();
   $('welcomeTitle').textContent = first ? `Bonjour ${first}` : `Bonjour ${profileName(currentProfile)}`;
-  $('adminTab').hidden = currentProfile?.role !== 'administrateur';
+  $('adminTab').hidden = !roleCanManageUsers();
   $('teamTab').hidden = !roleCanManageTeam();
 }
 function showLogin() { $('appView').hidden = true; $('loginView').hidden = false; }
@@ -240,10 +246,279 @@ async function searchSlots(e) {
 }
 
 async function loadAdmin() {
-  if(currentProfile?.role!=='administrateur')return;
-  $('groupsList').innerHTML=groups.length?groups.map(g=>`<div class="list-row"><div class="row-main"><strong>${escapeHtml(g.name)}</strong><span class="badge">${g.is_active?'Actif':'Inactif'}</span></div>${g.description?`<div class="muted">${escapeHtml(g.description)}</div>`:''}</div>`).join(''):'<div class="empty">Aucun groupe.</div>';
-  $('usersList').innerHTML=profiles.length?profiles.map(u=>`<div class="list-row"><div class="row-main"><div><strong>${escapeHtml(profileName(u))}</strong><div class="muted">${u.has_global_scope?'Accès global':'Accès selon groupes'} · ${u.is_active?'Actif':'Inactif'}</div></div><select class="role-select" data-role-user="${u.id}">${['technicien','planificateur','responsable','administrateur'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></div></div>`).join(''):'<div class="empty">Aucun utilisateur.</div>';
-  document.querySelectorAll('[data-role-user]').forEach(sel=>sel.addEventListener('change',async()=>{const id=sel.dataset.roleUser;const {error}=await supabase.rpc('admin_update_user_role',{target_user_id:id,new_role:sel.value});if(error){showToast(error.message);await loadReferenceData();await loadAdmin();return;}showToast('Rôle mis à jour.');await loadReferenceData();await loadAdmin();}));
+  if(!roleCanManageUsers()) return;
+
+  const {data: users, error: usersError} = await supabase.rpc('manager_list_profiles');
+  if(usersError){
+    $('usersList').innerHTML=`<div class="error">${escapeHtml(usersError.message)}</div>`;
+    return;
+  }
+  adminProfiles = users || [];
+
+  $('groupsList').innerHTML=groups.length
+    ? groups.map(g=>`<div class="list-row"><div class="row-main"><strong>${escapeHtml(g.name)}</strong><span class="badge">${g.is_active?'Actif':'Inactif'}</span></div>${g.description?`<div class="muted">${escapeHtml(g.description)}</div>`:''}</div>`).join('')
+    : '<div class="empty">Aucun groupe.</div>';
+
+  renderAdminUsers();
+}
+
+function renderAdminUsers() {
+  if(!roleCanManageUsers()) return;
+  const q=($('userSearch').value||'').trim().toLowerCase();
+  const role=$('userRoleFilter').value;
+  const status=$('userStatusFilter').value;
+
+  let rows=adminProfiles.filter(u=>{
+    const hay=`${profileName(u)} ${u.email||''} ${u.role||''}`.toLowerCase();
+    if(q && !hay.includes(q)) return false;
+    if(role && u.role!==role) return false;
+    if(status==='active' && !u.is_active) return false;
+    if(status==='inactive' && u.is_active) return false;
+    return true;
+  });
+
+  $('usersList').innerHTML=rows.length ? rows.map(u=>{
+    const groupNames=(u.group_names||[]).filter(Boolean).join(', ');
+    const protectedAdmin = !isAdmin() && u.role==='administrateur';
+    const self = u.id===currentProfile.id;
+    return `<div class="list-row user-row">
+      <div class="row-main">
+        <div class="user-identity">
+          <strong>${escapeHtml(profileName(u))}</strong>
+          <div class="muted">${escapeHtml(u.email||'E-mail non disponible')}</div>
+          <div class="user-badges">
+            <span class="badge">${escapeHtml(u.role)}</span>
+            <span class="badge ${u.is_active?'':'badge-muted'}">${u.is_active?'Actif':'Désactivé'}</span>
+            ${u.has_global_scope?'<span class="badge">Accès global</span>':''}
+          </div>
+          ${groupNames?`<div class="muted">${escapeHtml(groupNames)}</div>`:''}
+        </div>
+        <div class="user-actions">
+          <button class="small-btn" data-edit-user="${u.id}" ${protectedAdmin?'disabled':''}>Modifier</button>
+          <button class="ghost" data-toggle-user="${u.id}" ${self||protectedAdmin?'disabled':''}>${u.is_active?'Désactiver':'Réactiver'}</button>
+          <button class="danger-btn" data-delete-user="${u.id}" ${self||protectedAdmin?'disabled':''}>Archiver & supprimer</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty">Aucun utilisateur pour ce filtre.</div>';
+
+  $('usersList').querySelectorAll('[data-edit-user]').forEach(b=>b.addEventListener('click',()=>openEditUser(b.dataset.editUser)));
+  $('usersList').querySelectorAll('[data-toggle-user]').forEach(b=>b.addEventListener('click',()=>toggleUserActive(b.dataset.toggleUser)));
+  $('usersList').querySelectorAll('[data-delete-user]').forEach(b=>b.addEventListener('click',()=>openDeleteUser(b.dataset.deleteUser)));
+}
+
+function populateUserGroupControls(selectedIds=[], primaryId='') {
+  const selected=new Set(selectedIds);
+  $('userPrimaryGroup').innerHTML='<option value="">Aucun</option>'+groups.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+  $('userPrimaryGroup').value=primaryId||'';
+  $('userGroupsChecks').innerHTML=groups.length ? groups.map(g=>`
+    <label class="check-item"><input type="checkbox" class="user-group-check" value="${g.id}" ${selected.has(g.id)?'checked':''}><span><strong>${escapeHtml(g.name)}</strong></span></label>
+  `).join('') : '<div class="empty">Aucun groupe disponible.</div>';
+}
+
+function openNewUser() {
+  $('userId').value='';
+  $('userDialogTitle').textContent='Nouvel utilisateur';
+  $('userFirstName').value='';
+  $('userLastName').value='';
+  $('userDisplayName').value='';
+  $('userEmail').value='';
+  $('userEmail').disabled=false;
+  $('passwordWrap').hidden=false;
+  $('userTempPassword').required=true;
+  $('userTempPassword').value=generateTemporaryPassword();
+  $('userRole').value='technicien';
+  $('userRole').querySelector('option[value="administrateur"]').disabled=!isAdmin();
+  $('userGlobalScope').checked=false;
+  $('userActive').checked=true;
+  populateUserGroupControls();
+  $('userFormError').hidden=true;
+  $('userDialog').showModal();
+}
+
+function openEditUser(id) {
+  const u=adminProfiles.find(x=>x.id===id); if(!u)return;
+  if(!isAdmin() && u.role==='administrateur'){showToast('Seul un administrateur peut modifier un administrateur.');return;}
+  $('userId').value=u.id;
+  $('userDialogTitle').textContent='Modifier l’utilisateur';
+  $('userFirstName').value=u.first_name||'';
+  $('userLastName').value=u.last_name||'';
+  $('userDisplayName').value=u.display_name||'';
+  $('userEmail').value=u.email||'';
+  $('userEmail').disabled=true;
+  $('passwordWrap').hidden=true;
+  $('userTempPassword').required=false;
+  $('userRole').value=u.role||'technicien';
+  $('userRole').querySelector('option[value="administrateur"]').disabled=!isAdmin() && u.role!=='administrateur';
+  $('userGlobalScope').checked=!!u.has_global_scope;
+  $('userActive').checked=!!u.is_active;
+  populateUserGroupControls(u.group_ids||[],u.primary_group_id||'');
+  $('userFormError').hidden=true;
+  $('userDialog').showModal();
+}
+
+function generateTemporaryPassword() {
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+  let out='MdL!';
+  const a=new Uint32Array(12); crypto.getRandomValues(a);
+  for(const n of a) out+=chars[n%chars.length];
+  return out;
+}
+
+async function saveUser(e) {
+  e.preventDefault();
+  $('userFormError').hidden=true;
+  const id=$('userId').value||null;
+  const first_name=$('userFirstName').value.trim();
+  const last_name=$('userLastName').value.trim();
+  const display_name=$('userDisplayName').value.trim()||`${first_name} ${last_name}`.trim();
+  const email=$('userEmail').value.trim();
+  const password=$('userTempPassword').value;
+  const role=$('userRole').value;
+  const has_global_scope=$('userGlobalScope').checked;
+  const is_active=$('userActive').checked;
+  const group_ids=[...document.querySelectorAll('.user-group-check:checked')].map(x=>x.value);
+  let primary_group_id=$('userPrimaryGroup').value||null;
+  if(primary_group_id && !group_ids.includes(primary_group_id)) group_ids.push(primary_group_id);
+
+  const action=id?'update':'create';
+  if(!id && password.length<8){$('userFormError').textContent='Le mot de passe temporaire doit contenir au moins 8 caractères.';$('userFormError').hidden=false;return;}
+
+  const {data,error}=await supabase.functions.invoke('admin-users',{
+    body:{action,user_id:id,email,password,first_name,last_name,display_name,role,has_global_scope,is_active,group_ids,primary_group_id}
+  });
+  if(error){$('userFormError').textContent=error.message;$('userFormError').hidden=false;return;}
+  if(data?.error){$('userFormError').textContent=data.error;$('userFormError').hidden=false;return;}
+
+  $('userDialog').close();
+  showToast(id?'Utilisateur modifié.':'Utilisateur créé.');
+  await loadReferenceData();
+  await loadAdmin();
+}
+
+async function toggleUserActive(id) {
+  const u=adminProfiles.find(x=>x.id===id); if(!u)return;
+  if(id===currentProfile.id){showToast('Tu ne peux pas désactiver ton propre compte.');return;}
+  if(!isAdmin() && u.role==='administrateur'){showToast('Seul un administrateur peut gérer un administrateur.');return;}
+  const verb=u.is_active?'désactiver':'réactiver';
+  if(!confirm(`Confirmer : ${verb} ${profileName(u)} ?`))return;
+  const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'set_active',user_id:id,is_active:!u.is_active}});
+  if(error||data?.error){showToast(data?.error||error?.message||'Opération impossible.');return;}
+  showToast(u.is_active?'Compte désactivé.':'Compte réactivé.');
+  await loadReferenceData();
+  await loadAdmin();
+}
+
+function openDeleteUser(id) {
+  const u=adminProfiles.find(x=>x.id===id); if(!u)return;
+  if(id===currentProfile.id){showToast('La suppression de son propre compte est interdite.');return;}
+  if(!isAdmin() && u.role==='administrateur'){showToast('Seul un administrateur peut supprimer un administrateur.');return;}
+  deleteTarget=u;
+  archiveReadyForUserId=null;
+  $('confirmDeleteUserBtn').disabled=true;
+  $('archiveUserBtn').disabled=false;
+  $('archiveUserBtn').textContent='Exporter Excel';
+  $('deleteUserError').hidden=true;
+  $('deleteUserSummary').innerHTML=`<strong>${escapeHtml(profileName(u))}</strong><div class="muted">${escapeHtml(u.email||'')}</div><p>La suppression définitive sera débloquée uniquement après la génération de l’archive Excel.</p>`;
+  $('deleteUserDialog').showModal();
+}
+
+function safeFilePart(s) {
+  return String(s||'utilisateur').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'');
+}
+
+function formatArchiveDate(value) {
+  if(!value) return '';
+  const d=new Date(value);
+  return Number.isNaN(d.getTime()) ? String(value) : new Intl.DateTimeFormat('fr-FR',{dateStyle:'short',timeStyle:'short'}).format(d);
+}
+
+async function exportUserArchive() {
+  if(!deleteTarget)return;
+  $('archiveUserBtn').disabled=true;
+  $('archiveUserBtn').textContent='Préparation…';
+  $('deleteUserError').hidden=true;
+
+  try{
+    const {data,error}=await supabase.rpc('manager_user_archive',{target_user_id:deleteTarget.id});
+    if(error)throw error;
+    if(!data)throw new Error('Archive vide.');
+
+    const info=data.profile||{};
+    const infoRows=[
+      ['Archive calendrier','Calendrier Équipe MDL'],
+      ['Date de l’archive',new Intl.DateTimeFormat('fr-FR',{dateStyle:'long',timeStyle:'short'}).format(new Date())],
+      ['Nom affiché',info.display_name||''],
+      ['Prénom',info.first_name||''],
+      ['Nom',info.last_name||''],
+      ['E-mail',info.email||''],
+      ['Rôle',info.role||''],
+      ['Statut',info.is_active?'Actif':'Désactivé'],
+      ['Accès global',info.has_global_scope?'Oui':'Non'],
+      ['Groupes',(info.group_names||[]).join(', ')]
+    ];
+
+    const calendarRows=(data.events||[]).map(ev=>({
+      'Début': formatArchiveDate(ev.starts_at),
+      'Fin': formatArchiveDate(ev.ends_at),
+      'Journée entière': ev.all_day?'Oui':'Non',
+      'Titre': ev.title||'',
+      'Type': ev.event_type_name||'',
+      'Lieu': ev.location||'',
+      'Description': ev.description||'',
+      'Statut': ev.status||'',
+      'Rôle dans l’événement': ev.relationship||'',
+      'Propriétaire': ev.owner_name||'',
+      'Participants': (ev.participant_names||[]).join(', ')
+    }));
+
+    const wb=XLSX.utils.book_new();
+    const wsInfo=XLSX.utils.aoa_to_sheet(infoRows);
+    wsInfo['!cols']=[{wch:24},{wch:55}];
+    const wsCal=XLSX.utils.json_to_sheet(calendarRows.length?calendarRows:[{'Information':'Aucun événement dans le calendrier.'}]);
+    wsCal['!cols']=[{wch:20},{wch:20},{wch:16},{wch:34},{wch:22},{wch:28},{wch:55},{wch:16},{wch:22},{wch:28},{wch:50}];
+    XLSX.utils.book_append_sheet(wb,wsInfo,'Informations');
+    XLSX.utils.book_append_sheet(wb,wsCal,'Calendrier');
+
+    const date=toDateInput(new Date());
+    const filename=`Archive-Calendrier-${safeFilePart(profileName(deleteTarget))}-${date}.xlsx`;
+    XLSX.writeFile(wb,filename,{compression:true});
+
+    archiveReadyForUserId=deleteTarget.id;
+    $('confirmDeleteUserBtn').disabled=false;
+    $('archiveUserBtn').textContent='Archive générée ✓';
+    showToast('Archive Excel générée. La suppression est maintenant disponible.');
+  }catch(err){
+    $('archiveUserBtn').disabled=false;
+    $('archiveUserBtn').textContent='Exporter Excel';
+    $('deleteUserError').textContent=err?.message||String(err);
+    $('deleteUserError').hidden=false;
+  }
+}
+
+async function confirmDeleteUser() {
+  if(!deleteTarget || archiveReadyForUserId!==deleteTarget.id){
+    showToast('Génère d’abord l’archive Excel.');
+    return;
+  }
+  const typed=prompt(`Dernière confirmation.\nPour supprimer définitivement ${profileName(deleteTarget)}, saisis SUPPRIMER :`);
+  if(typed!=='SUPPRIMER')return;
+
+  $('confirmDeleteUserBtn').disabled=true;
+  $('confirmDeleteUserBtn').textContent='Suppression…';
+  const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'delete',user_id:deleteTarget.id}});
+  if(error||data?.error){
+    $('deleteUserError').textContent=data?.error||error?.message||'Suppression impossible.';
+    $('deleteUserError').hidden=false;
+    $('confirmDeleteUserBtn').disabled=false;
+    $('confirmDeleteUserBtn').textContent='Supprimer définitivement';
+    return;
+  }
+  $('deleteUserDialog').close();
+  showToast('Utilisateur supprimé après archivage.');
+  deleteTarget=null; archiveReadyForUserId=null;
+  await loadReferenceData();
+  await loadAdmin();
 }
 
 async function bootstrap() {
@@ -261,6 +536,20 @@ $('todayBtn').addEventListener('click',async()=>{cursorDate=startOfDay(new Date(
 document.querySelectorAll('.view-btn').forEach(b=>b.addEventListener('click',async()=>{calendarView=b.dataset.calView;await loadCalendarEvents();renderCalendar();}));
 $('teamGroupFilter').addEventListener('change',renderTeamUsers);$('refreshTeamBtn').addEventListener('click',async()=>{await loadReferenceData();renderTeamUsers();});$('slotSearchForm').addEventListener('submit',searchSlots);
 $('refreshAdminBtn').addEventListener('click',async()=>{await loadReferenceData();await loadAdmin();});
+
+$('addUserBtn').addEventListener('click',openNewUser);
+$('userForm').addEventListener('submit',saveUser);
+$('closeUserDialogBtn').addEventListener('click',()=>$('userDialog').close());
+$('cancelUserBtn').addEventListener('click',()=>$('userDialog').close());
+$('generatePasswordBtn').addEventListener('click',()=>{$('userTempPassword').value=generateTemporaryPassword();});
+$('userSearch').addEventListener('input',renderAdminUsers);
+$('userRoleFilter').addEventListener('change',renderAdminUsers);
+$('userStatusFilter').addEventListener('change',renderAdminUsers);
+$('archiveUserBtn').addEventListener('click',exportUserArchive);
+$('confirmDeleteUserBtn').addEventListener('click',confirmDeleteUser);
+$('closeDeleteUserDialogBtn').addEventListener('click',()=>$('deleteUserDialog').close());
+$('cancelDeleteUserBtn').addEventListener('click',()=>$('deleteUserDialog').close());
+
 $('addGroupBtn').addEventListener('click',()=>{$('groupName').value='';$('groupDescription').value='';$('groupDialog').showModal();});
 $('groupForm').addEventListener('submit',async e=>{if(e.submitter?.value==='cancel')return;e.preventDefault();const name=$('groupName').value.trim();if(!name)return;const {error}=await supabase.from('groups').insert({name,description:$('groupDescription').value.trim()||null,is_active:true});if(error){showToast(error.message);return;}$('groupDialog').close();await loadReferenceData();await loadAdmin();showToast('Groupe créé.');});
 document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','adminPanel'].forEach(id=>$(id).hidden=true);currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team')renderTeamUsers();if(currentMainView==='admin')await loadAdmin();}));

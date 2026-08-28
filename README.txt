@@ -1,22 +1,41 @@
-Calendrier Équipe MDL v0.2.0
+CALENDRIER ÉQUIPE MDL v0.3.0
 
 NOUVEAUTÉS
-- Vues Mois / Semaine / Agenda.
-- Navigation précédent / aujourd'hui / suivant.
-- Création, modification et suppression de rendez-vous.
-- Choix du calendrier cible selon les droits du compte.
-- Types d'événements.
-- Vue équipe avec filtre par groupe.
-- Recherche de créneaux communs via find_common_slots().
-- Interface responsive PC / téléphone et safe areas.
-- Aucun serveur local, Node, Java ou Python nécessaire pour faire fonctionner l'application.
+- Administration accessible aux administrateurs ET responsables.
+- Création d'utilisateurs depuis l'application.
+- Modification du rôle, groupes, groupe principal, statut et accès global.
+- Désactivation / réactivation d'un compte.
+- Suppression sécurisée en 2 étapes :
+  1) génération obligatoire d'une archive Excel (.xlsx),
+  2) confirmation explicite avant suppression définitive.
+- L'archive contient deux feuilles : Informations et Calendrier.
+- Un responsable ne peut pas créer/modifier/supprimer un administrateur.
+- Impossible de supprimer son propre compte.
+- Impossible de supprimer le dernier administrateur actif.
 
-MISE À JOUR GITHUB PAGES
-1. Exécuter SQL-v0.2.0.sql dans Supabase SQL Editor (recommandé pour ajouter les catégories).
-2. Décompresser le ZIP.
-3. Envoyer le CONTENU du dossier Calendrier-Equipe-MDL-v0.2.0 à la racine du dépôt GitHub.
-4. Remplacer index.html, app.js, styles.css et conserver config.js.
-5. Attendre la fin du déploiement GitHub Pages.
-6. Faire Ctrl+F5 dans le navigateur.
+INSTALLATION SANS NODE / SANS SERVEUR LOCAL
 
-La PWA/service worker reste volontairement désactivée dans cette version pour éviter les problèmes de cache pendant la phase de développement.
+1) SUPABASE > SQL Editor
+   Exécuter SQL-v0.3.0.sql.
+
+2) SUPABASE > Edge Functions
+   Cliquer "Deploy a new function" puis "Via Editor".
+   Nom EXACT de la fonction : admin-users
+   Coller le contenu de EDGE-FUNCTION-admin-users.txt (ou supabase/functions/admin-users/index.ts).
+   Déployer la fonction.
+
+   Aucun service_role n'est à mettre dans GitHub ou config.js.
+   Supabase fournit la clé serveur à l'Edge Function via ses secrets hébergés.
+
+3) GITHUB
+   Décompresser ce ZIP et remplacer les fichiers de la racine du dépôt
+   par ceux de Calendrier-Equipe-MDL-v0.3.0.
+   index.html, app.js, styles.css et config.js doivent rester à la racine.
+   Le dossier supabase peut rester dans GitHub : il ne contient AUCUN secret.
+
+4) Attendre le redéploiement GitHub Pages puis faire Ctrl+F5.
+
+IMPORTANT
+La création/suppression de comptes Auth ne peut pas être réalisée de façon sûre
+directement dans le navigateur avec la clé publique. C'est pourquoi v0.3.0 utilise
+une Supabase Edge Function côté serveur, tout en restant sans serveur local.
