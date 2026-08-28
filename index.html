@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#5b4fd6" />
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
-<link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css?v=020" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -18,18 +18,12 @@
       <h1>Calendrier Équipe MDL</h1>
       <p>Planning partagé, clair sur PC et téléphone.</p>
       <form id="loginForm" class="stack">
-        <label>
-          Adresse e-mail
-          <input id="email" type="email" autocomplete="username" required />
-        </label>
-        <label>
-          Mot de passe
-          <input id="password" type="password" autocomplete="current-password" required />
-        </label>
+        <label>Adresse e-mail<input id="email" type="email" autocomplete="username" required /></label>
+        <label>Mot de passe<input id="password" type="password" autocomplete="current-password" required /></label>
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.1.3 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.2.0 · prête.</div>
     </section>
   </main>
 
@@ -49,76 +43,135 @@
     </nav>
 
     <section id="agendaPanel" class="panel safe-bottom">
-      <div class="panel-head">
+      <div class="calendar-toolbar">
         <div>
-          <p class="eyebrow">Mes prochains rendez-vous</p>
-          <h2>Agenda</h2>
+          <p class="eyebrow">Mon calendrier</p>
+          <h2 id="calendarTitle">Agenda</h2>
         </div>
-        <button id="refreshAgendaBtn" class="ghost">Actualiser</button>
+        <div class="toolbar-actions">
+          <button id="prevBtn" class="icon-btn" aria-label="Précédent">‹</button>
+          <button id="todayBtn" class="ghost">Aujourd’hui</button>
+          <button id="nextBtn" class="icon-btn" aria-label="Suivant">›</button>
+          <button id="newEventBtn" class="primary">+ Rendez-vous</button>
+        </div>
       </div>
-      <div id="agendaList" class="event-list"></div>
+
+      <div class="view-switch" role="group" aria-label="Choix de la vue">
+        <button class="view-btn" data-cal-view="month">Mois</button>
+        <button class="view-btn active" data-cal-view="week">Semaine</button>
+        <button class="view-btn" data-cal-view="agenda">Agenda</button>
+      </div>
+
+      <div id="calendarHost" class="calendar-host"></div>
     </section>
 
     <section id="teamPanel" class="panel safe-bottom" hidden>
       <div class="panel-head">
-        <div>
-          <p class="eyebrow">Planification</p>
-          <h2>Vue équipe</h2>
-        </div>
+        <div><p class="eyebrow">Planification</p><h2>Vue équipe</h2></div>
+        <button id="refreshTeamBtn" class="ghost">Actualiser</button>
       </div>
-      <div class="card info-card">
-        <h3>Recherche de créneau</h3>
-        <p>Le moteur SQL est déjà prêt. Dans la prochaine étape, on branchera ici la sélection des techniciens, la durée et les propositions automatiques.</p>
+
+      <div class="team-grid">
+        <article class="card">
+          <div class="card-head"><h3>Techniciens</h3></div>
+          <label>Filtrer par groupe
+            <select id="teamGroupFilter"><option value="">Tous les groupes</option></select>
+          </label>
+          <div id="teamUsers" class="check-list"></div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><h3>Trouver un créneau commun</h3></div>
+          <form id="slotSearchForm" class="stack compact-stack">
+            <div class="two-cols">
+              <label>Du<input id="slotStartDate" type="date" required /></label>
+              <label>Au<input id="slotEndDate" type="date" required /></label>
+            </div>
+            <div class="two-cols">
+              <label>Durée
+                <select id="slotDuration">
+                  <option value="30">30 min</option>
+                  <option value="45">45 min</option>
+                  <option value="60" selected>1 h</option>
+                  <option value="90">1 h 30</option>
+                  <option value="120">2 h</option>
+                </select>
+              </label>
+              <label>Pas de recherche
+                <select id="slotStep">
+                  <option value="15" selected>15 min</option>
+                  <option value="30">30 min</option>
+                  <option value="60">1 h</option>
+                </select>
+              </label>
+            </div>
+            <button type="submit" class="primary">Rechercher les disponibilités</button>
+          </form>
+          <div id="slotResults" class="slot-results"></div>
+        </article>
       </div>
     </section>
 
     <section id="adminPanel" class="panel safe-bottom" hidden>
       <div class="panel-head">
-        <div>
-          <p class="eyebrow">Administration</p>
-          <h2>Utilisateurs & groupes</h2>
-        </div>
+        <div><p class="eyebrow">Administration</p><h2>Utilisateurs & groupes</h2></div>
         <button id="refreshAdminBtn" class="ghost">Actualiser</button>
       </div>
-
       <div class="admin-grid">
         <article class="card">
-          <div class="card-head">
-            <h3>Groupes</h3>
-            <button id="addGroupBtn" class="small-btn">+ Ajouter</button>
-          </div>
+          <div class="card-head"><h3>Groupes</h3><button id="addGroupBtn" class="small-btn">+ Ajouter</button></div>
           <div id="groupsList" class="simple-list"></div>
         </article>
-
         <article class="card">
-          <div class="card-head">
-            <h3>Utilisateurs</h3>
-          </div>
+          <div class="card-head"><h3>Utilisateurs</h3></div>
           <div id="usersList" class="simple-list"></div>
         </article>
       </div>
     </section>
   </div>
 
-  <dialog id="groupDialog">
-    <form method="dialog" id="groupForm" class="stack dialog-card">
-      <h2>Nouveau groupe</h2>
-      <label>
-        Nom du groupe
-        <input id="groupName" required maxlength="80" />
+  <dialog id="eventDialog">
+    <form id="eventForm" class="stack dialog-card wide-dialog">
+      <div class="dialog-title-row">
+        <div><p class="eyebrow">Calendrier</p><h2 id="eventDialogTitle">Nouveau rendez-vous</h2></div>
+        <button type="button" id="closeEventDialogBtn" class="icon-btn" aria-label="Fermer">×</button>
+      </div>
+      <input id="eventId" type="hidden" />
+      <label id="ownerWrap">Calendrier de
+        <select id="eventOwner"></select>
       </label>
-      <label>
-        Description
-        <textarea id="groupDescription" rows="3" maxlength="240"></textarea>
-      </label>
-      <div class="dialog-actions">
-        <button value="cancel" class="ghost">Annuler</button>
-        <button id="saveGroupBtn" value="default" class="primary">Créer</button>
+      <label>Titre<input id="eventTitle" maxlength="140" required placeholder="Ex. Intervention, réunion..." /></label>
+      <div class="two-cols">
+        <label>Début<input id="eventStart" type="datetime-local" required /></label>
+        <label>Fin<input id="eventEnd" type="datetime-local" required /></label>
+      </div>
+      <div class="two-cols">
+        <label>Type<select id="eventType"><option value="">Sans catégorie</option></select></label>
+        <label>Statut<select id="eventStatus"><option value="confirmed">Confirmé</option><option value="tentative">Provisoire</option><option value="cancelled">Annulé</option></select></label>
+      </div>
+      <label>Lieu<input id="eventLocation" maxlength="200" /></label>
+      <label>Description<textarea id="eventDescription" rows="4" maxlength="1500"></textarea></label>
+      <label class="check-line"><input id="eventAllDay" type="checkbox" /> Journée entière</label>
+      <p id="eventFormError" class="error" hidden></p>
+      <div class="dialog-actions split-actions">
+        <button type="button" id="deleteEventBtn" class="danger-btn" hidden>Supprimer</button>
+        <div class="right-actions">
+          <button type="button" id="cancelEventBtn" class="ghost">Annuler</button>
+          <button type="submit" class="primary">Enregistrer</button>
+        </div>
       </div>
     </form>
   </dialog>
 
-  <script type="module" src="app.js?v=013"></script>
-  <!-- Calendrier Équipe MDL v0.1.3 -->
+  <dialog id="groupDialog">
+    <form method="dialog" id="groupForm" class="stack dialog-card">
+      <h2>Nouveau groupe</h2>
+      <label>Nom du groupe<input id="groupName" required maxlength="80" /></label>
+      <label>Description<textarea id="groupDescription" rows="3" maxlength="240"></textarea></label>
+      <div class="dialog-actions"><button value="cancel" class="ghost">Annuler</button><button id="saveGroupBtn" value="default" class="primary">Créer</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js?v=020"></script>
 </body>
 </html>

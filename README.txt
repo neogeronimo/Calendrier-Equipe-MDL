@@ -1,16 +1,22 @@
-Calendrier Équipe MDL v0.1.3
+Calendrier Équipe MDL v0.2.0
 
-Version de diagnostic robuste.
+NOUVEAUTÉS
+- Vues Mois / Semaine / Agenda.
+- Navigation précédent / aujourd'hui / suivant.
+- Création, modification et suppression de rendez-vous.
+- Choix du calendrier cible selon les droits du compte.
+- Types d'événements.
+- Vue équipe avec filtre par groupe.
+- Recherche de créneaux communs via find_common_slots().
+- Interface responsive PC / téléphone et safe areas.
+- Aucun serveur local, Node, Java ou Python nécessaire pour faire fonctionner l'application.
 
-IMPORTANT POUR GITHUB PAGES
-1. Décompresser l'archive.
-2. Ouvrir le dossier Calendrier-Equipe-MDL-v0.1.3.
-3. Envoyer LES FICHIERS CONTENUS DANS CE DOSSIER à la RACINE du dépôt GitHub.
-   index.html doit être visible directement à la racine du dépôt.
-4. Attendre le redéploiement GitHub Pages.
-5. Ouvrir le site et faire Ctrl+F5.
+MISE À JOUR GITHUB PAGES
+1. Exécuter SQL-v0.2.0.sql dans Supabase SQL Editor (recommandé pour ajouter les catégories).
+2. Décompresser le ZIP.
+3. Envoyer le CONTENU du dossier Calendrier-Equipe-MDL-v0.2.0 à la racine du dépôt GitHub.
+4. Remplacer index.html, app.js, styles.css et conserver config.js.
+5. Attendre la fin du déploiement GitHub Pages.
+6. Faire Ctrl+F5 dans le navigateur.
 
-Cette version désactive volontairement le service worker/PWA afin d'éliminer tout ancien cache.
-Sous le bouton Se connecter, une ligne "Version 0.1.3" affiche chaque étape de connexion.
-
-Aucun nouveau SQL n'est nécessaire pour ce test.
+La PWA/service worker reste volontairement désactivée dans cette version pour éviter les problèmes de cache pendant la phase de développement.
