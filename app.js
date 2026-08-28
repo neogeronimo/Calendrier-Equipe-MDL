@@ -27,17 +27,20 @@ async function loadProfile() {
   const userId = currentSession?.user?.id;
   if (!userId) throw new Error('Session utilisateur absente.');
 
-  // Lecture directe du profil. Cette requête respecte les règles RLS Supabase.
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle();
+  // Le profil courant passe par une RPC SECURITY DEFINER dédiée.
+  // Cela évite de dépendre d'une lecture directe de public.profiles depuis le navigateur.
+  const { data, error } = await supabase.rpc('get_my_profile');
 
-  if (error) throw new Error(`Chargement du profil impossible : ${error.message}`);
-  if (!data) throw new Error(`Aucun profil trouvé pour l’utilisateur ${currentSession.user.email || userId}.`);
-  if (data.is_active === false) throw new Error('Ce compte est désactivé.');
-  return data;
+  if (error) {
+    const sessionRole = currentSession?.user?.role || 'inconnu';
+    throw new Error(`Chargement du profil impossible : ${error.message} (rôle session : ${sessionRole})`);
+  }
+
+  const profile = Array.isArray(data) ? data[0] : data;
+  if (!profile) throw new Error(`Aucun profil trouvé pour l’utilisateur ${currentSession.user.email || userId}.`);
+  if (profile.id !== userId) throw new Error('Le profil retourné ne correspond pas à la session connectée.');
+  if (profile.is_active === false) throw new Error('Ce compte est désactivé.');
+  return profile;
 }
 
 function setLoginBusy(isBusy) {
@@ -86,8 +89,12 @@ async function loadAdmin() {
   if (currentProfile?.role !== 'administrateur') return;
   const [{ data: groups, error: groupsError }, { data: users, error: usersError }] = await Promise.all([
     supabase.from('groups').select('*').order('name'),
-    supabase.from('profiles').select('*').order('display_name')
+    supabase.rpc('admin_list_profiles')
   ]);
+
+  if (users && Array.isArray(users)) {
+    users.sort((a, b) => String(a.display_name || '').localeCompare(String(b.display_name || ''), 'fr'));
+  }
 
   $('groupsList').innerHTML = groupsError
     ? `<div class="empty">${escapeHtml(groupsError.message)}</div>`
@@ -116,7 +123,7 @@ async function loadAdmin() {
     select.addEventListener('change', async (e) => {
       const id = e.target.dataset.roleUser;
       const role = e.target.value;
-      const { error } = await supabase.from('profiles').update({ role }).eq('id', id);
+      const { error } = await supabase.rpc('admin_update_user_role', { target_user_id: id, new_role: role });
       if (error) {
         showToast('Erreur : ' + error.message);
         await loadAdmin();
