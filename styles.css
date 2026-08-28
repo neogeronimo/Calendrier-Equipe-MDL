@@ -1,3 +1,4 @@
+*[hidden] { display: none !important; }
 :root {
   --bg: #f5f6fb;
   --surface: #ffffff;
@@ -71,3 +72,5 @@ dialog::backdrop { background: rgba(25,24,45,.42); backdrop-filter: blur(4px); }
   .row-main { flex-direction: column; }
   .role-select { width: 100%; }
 }
+
+.login-status{margin-top:14px;padding:10px 12px;border-radius:12px;background:#f3f4f8;color:#4f5264;font-size:.86rem;white-space:pre-wrap;}

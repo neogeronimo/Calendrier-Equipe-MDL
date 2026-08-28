@@ -1,34 +1,16 @@
-CALENDRIER ÉQUIPE MDL - v0.1.0
-================================
+Calendrier Équipe MDL v0.1.3
 
-Contenu :
-- Connexion Supabase
-- PWA responsive PC / Android
-- Respect des safe areas (encoche/poinçon + barre système)
-- Agenda des événements visibles par l'utilisateur connecté
-- Onglet Équipe pour planificateurs/responsables/admins
-- Administration de base pour les administrateurs
-- Création visuelle de groupes
-- Modification visuelle du rôle d'un utilisateur
+Version de diagnostic robuste.
 
-IMPORTANT
----------
-Cette version utilise la clé publique "anon" Supabase, ce qui est normal pour une application Web.
-Ne jamais ajouter de service_role key, mot de passe de base de données ou secret JWT dans config.js.
+IMPORTANT POUR GITHUB PAGES
+1. Décompresser l'archive.
+2. Ouvrir le dossier Calendrier-Equipe-MDL-v0.1.3.
+3. Envoyer LES FICHIERS CONTENUS DANS CE DOSSIER à la RACINE du dépôt GitHub.
+   index.html doit être visible directement à la racine du dépôt.
+4. Attendre le redéploiement GitHub Pages.
+5. Ouvrir le site et faire Ctrl+F5.
 
-TEST LOCAL
-----------
-Une PWA / module JavaScript doit être ouverte via HTTP, pas par double-clic sur index.html.
+Cette version désactive volontairement le service worker/PWA afin d'éliminer tout ancien cache.
+Sous le bouton Se connecter, une ligne "Version 0.1.3" affiche chaque étape de connexion.
 
-Depuis le dossier du projet :
-
-  python -m http.server 8080
-
-Puis ouvrir :
-  http://localhost:8080
-
-Aucun Java n'est nécessaire.
-
-DÉPLOIEMENT
------------
-Cette application est statique et pourra ensuite être publiée gratuitement sur un hébergement compatible HTTPS.
+Aucun nouveau SQL n'est nécessaire pour ce test.
