@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=030';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=031';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -23,7 +23,7 @@ let archiveReadyForUserId = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.3.0 · ${message}`;
+  if (box) box.textContent = `Version 0.3.1 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -35,6 +35,18 @@ function setLoginBusy(isBusy) {
 function showToast(message, ms=3000) {
   const t = $('toast'); t.textContent = message; t.hidden = false;
   clearTimeout(showToast.timer); showToast.timer = setTimeout(() => t.hidden = true, ms);
+}
+
+async function functionErrorMessage(error) {
+  if (!error) return 'Erreur inconnue';
+  try {
+    if (error.context && typeof error.context.json === 'function') {
+      const payload = await error.context.json();
+      if (payload?.error) return payload.error;
+      if (payload?.message) return payload.message;
+    }
+  } catch {}
+  return error.message || String(error);
 }
 function withTimeout(promise, ms, label) {
   let timer;
@@ -387,7 +399,7 @@ async function saveUser(e) {
   const {data,error}=await supabase.functions.invoke('admin-users',{
     body:{action,user_id:id,email,password,first_name,last_name,display_name,role,has_global_scope,is_active,group_ids,primary_group_id}
   });
-  if(error){$('userFormError').textContent=error.message;$('userFormError').hidden=false;return;}
+  if(error){$('userFormError').textContent=await functionErrorMessage(error);$('userFormError').hidden=false;return;}
   if(data?.error){$('userFormError').textContent=data.error;$('userFormError').hidden=false;return;}
 
   $('userDialog').close();
@@ -403,7 +415,7 @@ async function toggleUserActive(id) {
   const verb=u.is_active?'désactiver':'réactiver';
   if(!confirm(`Confirmer : ${verb} ${profileName(u)} ?`))return;
   const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'set_active',user_id:id,is_active:!u.is_active}});
-  if(error||data?.error){showToast(data?.error||error?.message||'Opération impossible.');return;}
+  if(error||data?.error){showToast(data?.error||(await functionErrorMessage(error))||'Opération impossible.');return;}
   showToast(u.is_active?'Compte désactivé.':'Compte réactivé.');
   await loadReferenceData();
   await loadAdmin();
@@ -508,7 +520,7 @@ async function confirmDeleteUser() {
   $('confirmDeleteUserBtn').textContent='Suppression…';
   const {data,error}=await supabase.functions.invoke('admin-users',{body:{action:'delete',user_id:deleteTarget.id}});
   if(error||data?.error){
-    $('deleteUserError').textContent=data?.error||error?.message||'Suppression impossible.';
+    $('deleteUserError').textContent=data?.error||(await functionErrorMessage(error))||'Suppression impossible.';
     $('deleteUserError').hidden=false;
     $('confirmDeleteUserBtn').disabled=false;
     $('confirmDeleteUserBtn').textContent='Supprimer définitivement';
@@ -551,7 +563,7 @@ $('closeDeleteUserDialogBtn').addEventListener('click',()=>$('deleteUserDialog')
 $('cancelDeleteUserBtn').addEventListener('click',()=>$('deleteUserDialog').close());
 
 $('addGroupBtn').addEventListener('click',()=>{$('groupName').value='';$('groupDescription').value='';$('groupDialog').showModal();});
-$('groupForm').addEventListener('submit',async e=>{if(e.submitter?.value==='cancel')return;e.preventDefault();const name=$('groupName').value.trim();if(!name)return;const {error}=await supabase.from('groups').insert({name,description:$('groupDescription').value.trim()||null,is_active:true});if(error){showToast(error.message);return;}$('groupDialog').close();await loadReferenceData();await loadAdmin();showToast('Groupe créé.');});
+$('groupForm').addEventListener('submit',async e=>{if(e.submitter?.value==='cancel')return;e.preventDefault();const name=$('groupName').value.trim();if(!name)return;const {error}=await supabase.rpc('manager_create_group',{new_name:name,new_description:$('groupDescription').value.trim()||null});if(error){showToast(error.message,5000);return;}$('groupDialog').close();await loadReferenceData();await loadAdmin();showToast('Groupe créé.');});
 document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','adminPanel'].forEach(id=>$(id).hidden=true);currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team')renderTeamUsers();if(currentMainView==='admin')await loadAdmin();}));
 
 bootstrap();

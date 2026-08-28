@@ -1,0 +1,247 @@
+import { withSupabase } from 'npm:@supabase/server'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
+Deno.serve(
+  withSupabase({ auth: 'user' }, async (req, ctx) => {
+    if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+    try {
+      const callerId = ctx.userClaims?.sub
+      if (!callerId) return json({ error: 'Utilisateur connecté introuvable' })
+
+      const { data: caller, error: callerError } = await ctx.supabaseAdmin
+        .from('profiles')
+        .select('id,role,is_active')
+        .eq('id', callerId)
+        .single()
+
+      if (callerError || !caller || !caller.is_active ||
+          !['administrateur','responsable'].includes(caller.role)) {
+        return json({ error: 'Accès administrateur ou responsable requis' })
+      }
+
+      const body = await req.json()
+      const action = body.action
+
+      const getTarget = async (targetId: string) => {
+        const { data: target, error } = await ctx.supabaseAdmin
+          .from('profiles')
+          .select('id,role,is_active')
+          .eq('id', targetId)
+          .single()
+
+        if (error || !target) throw new Error('Utilisateur introuvable')
+        if (target.id === callerId) throw new Error('Cette opération est interdite sur votre propre compte')
+        if (caller.role === 'responsable' && target.role === 'administrateur') {
+          throw new Error('Un responsable ne peut pas gérer un administrateur')
+        }
+        return target
+      }
+
+      if (action === 'create') {
+        const role = String(body.role || 'technicien')
+        if (!['technicien','planificateur','responsable','administrateur'].includes(role)) {
+          return json({ error: 'Rôle invalide' })
+        }
+        if (caller.role !== 'administrateur' && role === 'administrateur') {
+          return json({ error: 'Seul un administrateur peut créer un administrateur' })
+        }
+
+        const email = String(body.email || '').trim().toLowerCase()
+        const password = String(body.password || '')
+        if (!email || password.length < 8) {
+          return json({ error: 'E-mail ou mot de passe temporaire invalide' })
+        }
+
+        const firstName = String(body.first_name || '').trim()
+        const lastName = String(body.last_name || '').trim()
+        const displayName = String(body.display_name || '').trim() || `${firstName} ${lastName}`.trim()
+
+        const { data: created, error: createError } = await ctx.supabaseAdmin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: {
+            first_name: firstName,
+            last_name: lastName,
+            display_name: displayName,
+          },
+        })
+
+        if (createError || !created.user) {
+          return json({ error: createError?.message || 'Création impossible' })
+        }
+
+        const uid = created.user.id
+
+        try {
+          const { error: profileError } = await ctx.supabaseAdmin
+            .from('profiles')
+            .update({
+              first_name: firstName,
+              last_name: lastName,
+              display_name: displayName,
+              role,
+              is_active: body.is_active !== false,
+              has_global_scope: !!body.has_global_scope,
+            })
+            .eq('id', uid)
+
+          if (profileError) throw profileError
+
+          const groupIds = Array.isArray(body.group_ids) ? body.group_ids : []
+          const primary = body.primary_group_id || null
+
+          if (groupIds.length) {
+            const rows = groupIds.map((group_id: string) => ({
+              user_id: uid,
+              group_id,
+              is_primary: primary === group_id,
+            }))
+            const { error: groupsError } = await ctx.supabaseAdmin.from('user_groups').insert(rows)
+            if (groupsError) throw groupsError
+          }
+        } catch (e) {
+          await ctx.supabaseAdmin.auth.admin.deleteUser(uid)
+          throw e
+        }
+
+        return json({ ok: true, user_id: uid })
+      }
+
+      if (action === 'update') {
+        const targetId = String(body.user_id || '')
+        const target = await getTarget(targetId)
+        const role = String(body.role || target.role)
+
+        if (!['technicien','planificateur','responsable','administrateur'].includes(role)) {
+          return json({ error: 'Rôle invalide' })
+        }
+        if (caller.role !== 'administrateur' && role === 'administrateur') {
+          return json({ error: 'Seul un administrateur peut attribuer ce rôle' })
+        }
+
+        const { error: updateError } = await ctx.supabaseAdmin.from('profiles').update({
+          first_name: String(body.first_name || '').trim(),
+          last_name: String(body.last_name || '').trim(),
+          display_name: String(body.display_name || '').trim(),
+          role,
+          is_active: body.is_active !== false,
+          has_global_scope: !!body.has_global_scope,
+        }).eq('id', targetId)
+
+        if (updateError) throw updateError
+
+        await ctx.supabaseAdmin.from('user_groups').delete().eq('user_id', targetId)
+
+        const groupIds = Array.isArray(body.group_ids) ? body.group_ids : []
+        const primary = body.primary_group_id || null
+        if (groupIds.length) {
+          const rows = groupIds.map((group_id: string) => ({
+            user_id: targetId,
+            group_id,
+            is_primary: primary === group_id,
+          }))
+          const { error: groupsError } = await ctx.supabaseAdmin.from('user_groups').insert(rows)
+          if (groupsError) throw groupsError
+        }
+
+        return json({ ok: true })
+      }
+
+      if (action === 'set_active') {
+        const targetId = String(body.user_id || '')
+        await getTarget(targetId)
+        const { error } = await ctx.supabaseAdmin
+          .from('profiles')
+          .update({ is_active: !!body.is_active })
+          .eq('id', targetId)
+        if (error) throw error
+        return json({ ok: true })
+      }
+
+      if (action === 'delete') {
+        const targetId = String(body.user_id || '')
+        const target = await getTarget(targetId)
+
+        if (target.role === 'administrateur') {
+          const { count } = await ctx.supabaseAdmin
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'administrateur')
+            .eq('is_active', true)
+
+          if ((count || 0) <= 1) {
+            return json({ error: 'Impossible de supprimer le dernier administrateur actif' })
+          }
+        }
+
+        const { data: owned } = await ctx.supabaseAdmin
+          .from('events')
+          .select('id')
+          .eq('owner_id', targetId)
+
+        const ownedIds = (owned || []).map((x: any) => x.id)
+
+        if (ownedIds.length) {
+          const { error } = await ctx.supabaseAdmin
+            .from('event_participants')
+            .delete()
+            .in('event_id', ownedIds)
+          if (error) throw error
+        }
+
+        {
+          const { error } = await ctx.supabaseAdmin
+            .from('event_participants')
+            .delete()
+            .eq('user_id', targetId)
+          if (error) throw error
+        }
+
+        {
+          const { error } = await ctx.supabaseAdmin
+            .from('events')
+            .update({ created_by: callerId })
+            .eq('created_by', targetId)
+            .neq('owner_id', targetId)
+          if (error) throw error
+        }
+
+        {
+          const { error } = await ctx.supabaseAdmin
+            .from('events')
+            .delete()
+            .eq('owner_id', targetId)
+          if (error) throw error
+        }
+
+        await ctx.supabaseAdmin.from('working_hours').delete().eq('user_id', targetId)
+        await ctx.supabaseAdmin.from('manager_group_access').delete().eq('user_id', targetId)
+        await ctx.supabaseAdmin.from('user_groups').delete().eq('user_id', targetId)
+
+        const { error: deleteAuthError } = await ctx.supabaseAdmin.auth.admin.deleteUser(targetId)
+        if (deleteAuthError) throw deleteAuthError
+
+        return json({ ok: true })
+      }
+
+      return json({ error: 'Action inconnue' })
+    } catch (e) {
+      console.error(e)
+      return json({ error: e instanceof Error ? e.message : String(e) })
+    }
+  })
+)
