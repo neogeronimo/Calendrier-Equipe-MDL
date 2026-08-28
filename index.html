@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#5b4fd6" />
+  <meta name="color-scheme" content="light" />
+  <title>Calendrier Équipe MDL</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="toast" class="toast" hidden></div>
+
+  <main id="loginView" class="login-shell safe-shell">
+    <section class="login-card">
+      <div class="brand-mark" aria-hidden="true">📅</div>
+      <h1>Calendrier Équipe MDL</h1>
+      <p>Planning partagé, clair sur PC et téléphone.</p>
+      <form id="loginForm" class="stack">
+        <label>
+          Adresse e-mail
+          <input id="email" type="email" autocomplete="username" required />
+        </label>
+        <label>
+          Mot de passe
+          <input id="password" type="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit" class="primary">Se connecter</button>
+      </form>
+      <p id="loginError" class="error" hidden></p>
+    </section>
+  </main>
+
+  <div id="appView" class="app-shell" hidden>
+    <header class="topbar safe-top">
+      <div>
+        <p class="eyebrow">Calendrier Équipe MDL</p>
+        <h1 id="welcomeTitle">Bonjour</h1>
+      </div>
+      <button id="logoutBtn" class="ghost">Déconnexion</button>
+    </header>
+
+    <nav class="tabs" aria-label="Navigation principale">
+      <button class="tab active" data-view="agenda">Mon agenda</button>
+      <button class="tab" data-view="team" id="teamTab">Équipe</button>
+      <button class="tab" data-view="admin" id="adminTab" hidden>Administration</button>
+    </nav>
+
+    <section id="agendaPanel" class="panel safe-bottom">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Mes prochains rendez-vous</p>
+          <h2>Agenda</h2>
+        </div>
+        <button id="refreshAgendaBtn" class="ghost">Actualiser</button>
+      </div>
+      <div id="agendaList" class="event-list"></div>
+    </section>
+
+    <section id="teamPanel" class="panel safe-bottom" hidden>
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Planification</p>
+          <h2>Vue équipe</h2>
+        </div>
+      </div>
+      <div class="card info-card">
+        <h3>Recherche de créneau</h3>
+        <p>Le moteur SQL est déjà prêt. Dans la prochaine étape, on branchera ici la sélection des techniciens, la durée et les propositions automatiques.</p>
+      </div>
+    </section>
+
+    <section id="adminPanel" class="panel safe-bottom" hidden>
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Administration</p>
+          <h2>Utilisateurs & groupes</h2>
+        </div>
+        <button id="refreshAdminBtn" class="ghost">Actualiser</button>
+      </div>
+
+      <div class="admin-grid">
+        <article class="card">
+          <div class="card-head">
+            <h3>Groupes</h3>
+            <button id="addGroupBtn" class="small-btn">+ Ajouter</button>
+          </div>
+          <div id="groupsList" class="simple-list"></div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <h3>Utilisateurs</h3>
+          </div>
+          <div id="usersList" class="simple-list"></div>
+        </article>
+      </div>
+    </section>
+  </div>
+
+  <dialog id="groupDialog">
+    <form method="dialog" id="groupForm" class="stack dialog-card">
+      <h2>Nouveau groupe</h2>
+      <label>
+        Nom du groupe
+        <input id="groupName" required maxlength="80" />
+      </label>
+      <label>
+        Description
+        <textarea id="groupDescription" rows="3" maxlength="240"></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost">Annuler</button>
+        <button id="saveGroupBtn" value="default" class="primary">Créer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
