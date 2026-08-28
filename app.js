@@ -25,15 +25,34 @@ function formatDateTime(value) {
 
 async function loadProfile() {
   const userId = currentSession?.user?.id;
-  if (!userId) return null;
+  if (!userId) throw new Error('Session utilisateur absente.');
+
+  // Lecture directe du profil. Cette requête respecte les règles RLS Supabase.
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', userId)
-    .single();
-  if (error) throw error;
+    .maybeSingle();
+
+  if (error) throw new Error(`Chargement du profil impossible : ${error.message}`);
+  if (!data) throw new Error(`Aucun profil trouvé pour l’utilisateur ${currentSession.user.email || userId}.`);
+  if (data.is_active === false) throw new Error('Ce compte est désactivé.');
   return data;
 }
+
+function setLoginBusy(isBusy) {
+  const button = document.querySelector('#loginForm button[type="submit"]');
+  if (!button) return;
+  button.disabled = isBusy;
+  button.textContent = isBusy ? 'Connexion…' : 'Se connecter';
+}
+
+function showLoginError(message) {
+  const box = $('loginError');
+  box.textContent = message;
+  box.hidden = false;
+}
+
 
 async function loadAgenda() {
   const list = $('agendaList');
@@ -127,35 +146,47 @@ function showLogin() {
 }
 
 async function bootstrap() {
-  const { data: { session } } = await supabase.auth.getSession();
-  currentSession = session;
-  if (!session) { showLogin(); return; }
   try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    currentSession = session;
+    if (!session) { showLogin(); return; }
+
     currentProfile = await loadProfile();
     showApp();
     await loadAgenda();
     if (currentProfile?.role === 'administrateur') await loadAdmin();
   } catch (e) {
-    showToast('Erreur de profil : ' + e.message);
+    console.error('Erreur au démarrage :', e);
+    showLogin();
+    showLoginError('Connexion détectée, mais le profil ne peut pas être chargé : ' + (e?.message || e));
   }
 }
 
 $('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('loginError').hidden = true;
-  const email = $('email').value.trim();
-  const password = $('password').value;
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) {
-    $('loginError').textContent = error.message;
-    $('loginError').hidden = false;
-    return;
+  setLoginBusy(true);
+
+  try {
+    const email = $('email').value.trim();
+    const password = $('password').value;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    if (!data?.session) throw new Error('Supabase a accepté les identifiants mais n’a renvoyé aucune session.');
+
+    currentSession = data.session;
+    currentProfile = await loadProfile();
+    showApp();
+    await loadAgenda();
+    if (currentProfile?.role === 'administrateur') await loadAdmin();
+  } catch (e) {
+    console.error('Erreur de connexion :', e);
+    showLogin();
+    showLoginError(e?.message || String(e));
+  } finally {
+    setLoginBusy(false);
   }
-  currentSession = data.session;
-  currentProfile = await loadProfile();
-  showApp();
-  await loadAgenda();
-  if (currentProfile?.role === 'administrateur') await loadAdmin();
 });
 
 $('logoutBtn').addEventListener('click', async () => {
