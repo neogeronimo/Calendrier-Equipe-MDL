@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=104';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=110';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -32,13 +32,14 @@ let deferredInstallPrompt=null;
 let teamAbsenceOnly=false;
 let notificationTimer=null;
 let schedulingSettings = null;
-const APP_VERSION='1.0.4';
+const APP_VERSION='1.1.0';
+const PUSH_VAPID_PUBLIC_KEY='BOM2G56uDxJtG30Jjv_3n4w3JxWCRKZe0v8gA9aN7qSAJjpRRi-7LNxST2pb74bsc4rEhiIXEMZpw08tQIlImkE';
 let lastSuccessfulSync=null;
 let diagnosticsText='';
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 1.0.4 · ${message}`;
+  if (box) box.textContent = `Version 1.1.0 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -1877,7 +1878,7 @@ function installPwa(){
   if('serviceWorker' in navigator){
     window.addEventListener('load',async()=>{
       try{
-        const reg=await navigator.serviceWorker.register('./sw.js?v=104');
+        const reg=await navigator.serviceWorker.register('./sw.js?v=110');
         await reg.update();
         if(reg.waiting)showToast('Une mise à jour est prête. Recharge l’application.',5000);
       }catch(err){console.warn('Service Worker',err)}
@@ -1992,6 +1993,42 @@ function startNotificationLoop(){
   notificationTimer=setInterval(()=>{buildLocalNotifications();maybeSendBrowserReminder()},30000);
 }
 
+
+function urlBase64ToUint8Array(base64String){
+  const padding='='.repeat((4-base64String.length%4)%4);
+  const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(base64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+async function syncPushSubscription(enabled){
+  if(!currentUser?.id)throw new Error('Utilisateur non connecté');
+  if(!('serviceWorker' in navigator)||!('PushManager' in window))throw new Error('Push non pris en charge');
+  const reg=await navigator.serviceWorker.ready;
+  let sub=await reg.pushManager.getSubscription();
+  if(!enabled){
+    if(sub){
+      await supabase.from('push_subscriptions').delete().eq('endpoint',sub.endpoint);
+      await sub.unsubscribe();
+    }
+    await supabase.from('push_preferences').upsert({user_id:currentUser.id,enabled:false,reminder_minutes:Number($('notificationReminderMinutes').value||30),notify_changes:$('notifyMeetingChanges').checked,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+    return false;
+  }
+  if(Notification.permission!=='granted')throw new Error('Autorisation Android non accordée');
+  if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(PUSH_VAPID_PUBLIC_KEY)});
+  const j=sub.toJSON();
+  const {error:se}=await supabase.from('push_subscriptions').upsert({user_id:currentUser.id,endpoint:sub.endpoint,p256dh:j.keys?.p256dh,auth:j.keys?.auth,user_agent:navigator.userAgent,is_active:true,updated_at:new Date().toISOString()},{onConflict:'endpoint'});
+  if(se)throw se;
+  const {error:pe}=await supabase.from('push_preferences').upsert({user_id:currentUser.id,enabled:true,reminder_minutes:Number($('notificationReminderMinutes').value||30),notify_changes:$('notifyMeetingChanges').checked,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+  if(pe)throw pe;
+  return true;
+}
+async function loadServerPushPreference(){
+  if(!currentUser?.id)return null;
+  const {data,error}=await supabase.from('push_preferences').select('*').eq('user_id',currentUser.id).maybeSingle();
+  if(error){console.error('push_preferences',error);return null}
+  return data;
+}
+
 function androidNotificationHelp(){
   return 'Android bloque actuellement les notifications. Ouvre Paramètres Android > Applications > Calendrier Équipe MDL (ou Chrome) > Notifications, puis autorise-les.';
 }
@@ -2011,7 +2048,8 @@ async function handleNotificationToggle(){
   if(!box.checked){
     const p=notificationPrefs();
     saveNotificationPrefs({...p,enabled:false,saved_at:new Date().toISOString()});
-    $('notificationSettingsStatus').textContent='Rappels désactivés et mémorisés.';
+    try{await syncPushSubscription(false)}catch(err){console.error('Désactivation push',err)}
+    $('notificationSettingsStatus').textContent='Rappels push désactivés et mémorisés.';
     startNotificationLoop();
     return;
   }
@@ -2028,8 +2066,18 @@ async function handleNotificationToggle(){
       changes:$('notifyMeetingChanges').checked,
       saved_at:new Date().toISOString()
     });
-    box.checked=true;
-    $('notificationSettingsStatus').textContent='Notifications Android autorisées · rappels activés et mémorisés.';
+    try{
+      await syncPushSubscription(true);
+      box.checked=true;
+      $('notificationSettingsStatus').textContent='Push Android activé · rappels reçus même application fermée.';
+    }catch(err){
+      console.error('Activation push',err);
+      box.checked=false;
+      saveNotificationPrefs({...p,enabled:false,saved_at:new Date().toISOString()});
+      $('notificationSettingsStatus').textContent='Autorisation accordée, mais abonnement Push impossible.';
+      showToast(`Push impossible : ${err.message}`,8000);
+      return;
+    }
     startNotificationLoop();
     return;
   }
@@ -2050,7 +2098,9 @@ async function handleNotificationToggle(){
 }
 
 async function loadNotificationSettings(){
-  const p=notificationPrefs();
+  let p=notificationPrefs();
+  const serverPref=await loadServerPushPreference();
+  if(serverPref)p={...p,enabled:serverPref.enabled,minutes:serverPref.reminder_minutes,changes:serverPref.notify_changes};
   const permission=('Notification' in window)?Notification.permission:'unsupported';
 
   // L'autorisation Android et le choix utilisateur sont deux choses distinctes.
@@ -2099,6 +2149,7 @@ async function saveNotificationSettings(){
     saved_at:new Date().toISOString()
   };
   saveNotificationPrefs(prefs);
+  try{await syncPushSubscription(prefs.enabled)}catch(err){showToast(`Push : ${err.message}`,8000);return}
   $('notificationSettingsStatus').textContent=prefs.enabled
     ? 'Notifications Android autorisées · réglages mémorisés.'
     : 'Notifications désactivées et mémorisées.';
@@ -2127,6 +2178,7 @@ async function testNotification(){
     changes:$('notifyMeetingChanges').checked,
     saved_at:new Date().toISOString()
   });
+  try{await syncPushSubscription(true)}catch(err){showToast(`Abonnement Push impossible : ${err.message}`,8000);return}
 
   const ok=await showSystemNotification('Calendrier Équipe MDL',{
     body:'Test Android réussi. Les notifications système sont bien autorisées.',
