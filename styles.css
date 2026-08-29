@@ -1009,3 +1009,28 @@ button,input,select,textarea{font:inherit}
   .mobile-action strong{font-size:.78rem!important}
   .premium-card,.card{padding:14px!important}
 }
+
+
+/* =========================================================
+   v1.0.0 — FINAL RELEASE
+   ========================================================= */
+.connection-banner{position:fixed;z-index:500;top:0;left:0;right:0;padding:8px 14px;text-align:center;background:#fff4d6;color:#7b5b00;border-bottom:1px solid #f0d98b;font-weight:800;font-size:.82rem}
+#syncNowBtn.spinning{animation:mdl-spin .8s linear infinite}
+#syncNowBtn.offline{opacity:.45}
+@keyframes mdl-spin{to{transform:rotate(360deg)}}
+.diagnostics-card{grid-column:1/-1}
+.diagnostic-line strong{font-size:.85rem}
+.diag-ok{color:#25845d}
+.diag-ko{color:#b24b4b}
+.inline-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.inline-actions button{min-width:160px}
+@media(max-width:860px){
+  .connection-banner{font-size:.86rem;padding:10px 12px}
+  .diagnostic-line{gap:12px}
+  .diagnostic-line strong{text-align:right;font-size:.84rem}
+  .inline-actions{display:grid;grid-template-columns:1fr 1fr}
+  .inline-actions button{min-width:0}
+}
+@media(max-width:430px){
+  .inline-actions{grid-template-columns:1fr}
+}

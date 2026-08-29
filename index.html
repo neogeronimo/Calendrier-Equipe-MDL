@@ -7,10 +7,10 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="manifest" href="manifest.webmanifest?v=091" />
+  <link rel="manifest" href="manifest.webmanifest?v=100" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="styles.css?v=091" />
+  <link rel="stylesheet" href="styles.css?v=100" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -26,12 +26,13 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.9.1 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 1.0.0 · prête.</div>
     </section>
   </main>
 
   
 <div id="appView" hidden>
+    <div id="connectionBanner" class="connection-banner" hidden>Connexion réseau indisponible. Les données affichées peuvent être anciennes.</div>
   <div class="workspace-shell">
     <aside class="sidebar safe-top safe-bottom">
       <div class="sidebar-brand">
@@ -84,6 +85,7 @@
         </div>
         <div class="top-actions">
           <button class="top-icon" id="themeDecorBtn" type="button" aria-label="Apparence">☼</button>
+          <button class="top-icon" id="syncNowBtn" type="button" aria-label="Synchroniser" title="Synchroniser">↻</button>
           <button class="top-icon notification-bell" id="notificationBellBtn" type="button" aria-label="Notifications">🔔<span id="notificationBadge" class="notification-badge" hidden>0</span></button>
           <button class="top-icon" type="button" aria-label="Aide">?</button>
           <div class="user-card">
@@ -411,6 +413,16 @@
           <button id="installPwaBtn" class="primary" hidden>Installer l’application</button>
         </article>
 
+        <article class="card diagnostics-card">
+          <div class="card-head"><div><h3>État de l’application</h3><p class="muted admin-note">Contrôle rapide utile avant un déploiement ou pour un dépannage.</p></div></div>
+          <div id="diagnosticsSummary" class="account-summary"></div>
+          <div class="inline-actions">
+            <button id="runDiagnosticsBtn" class="primary">Lancer le contrôle</button>
+            <button id="copyDiagnosticsBtn" class="ghost">Copier le diagnostic</button>
+          </div>
+          <p id="diagnosticsStatus" class="muted"></p>
+        </article>
+
         <article class="card working-hours-card">
           <div class="card-head">
             <div><h3>Horaires individuels</h3><p class="muted admin-note">Utilisés par la recherche de disponibilités.</p></div>
@@ -663,7 +675,7 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=091"></script>
+  <script type="module" src="app.js?v=100"></script>
 
   <dialog id="eventTypeDialog">
     <form id="eventTypeForm" class="stack dialog-card">

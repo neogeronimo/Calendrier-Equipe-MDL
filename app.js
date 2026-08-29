@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=091';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=100';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -32,10 +32,13 @@ let deferredInstallPrompt=null;
 let teamAbsenceOnly=false;
 let notificationTimer=null;
 let schedulingSettings = null;
+const APP_VERSION='1.0.0';
+let lastSuccessfulSync=null;
+let diagnosticsText='';
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.9.1 · ${message}`;
+  if (box) box.textContent = `Version 1.0.0 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -45,7 +48,7 @@ function setLoginBusy(isBusy) {
   if (!b) return; b.disabled = isBusy; b.textContent = isBusy ? 'Connexion…' : 'Se connecter';
 }
 function showToast(message, ms=3000) {
-  const t = $('toast'); t.textContent = message; t.hidden = false;
+  const t = $('toast'); if(!t){console.log('[Toast]',message);return;} t.textContent = message; t.hidden = false;
   clearTimeout(showToast.timer); showToast.timer = setTimeout(() => t.hidden = true, ms);
 }
 
@@ -139,6 +142,7 @@ async function enterApplication(session) {
   showAppShell();
   await loadReferenceData();
   await loadCalendarEvents();
+  lastSuccessfulSync=new Date();
   renderCalendar();
   if (roleCanManageTeam()) renderTeamUsers();
   setStatus('application ouverte.');
@@ -1504,6 +1508,103 @@ function updateHeaderIdentity(){
   document.querySelectorAll('.admin-only').forEach(el=>el.hidden=!roleCanManageUsers());
   if($('adminSideTitle')) $('adminSideTitle').hidden=!roleCanManageUsers();
 }
+
+function updateConnectionUi(){
+  const offline=!navigator.onLine;
+  if($('connectionBanner')) $('connectionBanner').hidden=!offline;
+  if($('syncNowBtn')){
+    $('syncNowBtn').classList.toggle('offline',offline);
+    $('syncNowBtn').title=offline?'Hors connexion':'Synchroniser';
+  }
+}
+window.addEventListener('online',()=>{updateConnectionUi();showToast('Connexion rétablie.');synchronizeApp(false);});
+window.addEventListener('offline',()=>{updateConnectionUi();showToast('Connexion perdue. Mode consultation limitée.',5000);});
+updateConnectionUi();
+
+async function synchronizeApp(showMessage=true){
+  if(!navigator.onLine){updateConnectionUi();if(showMessage)showToast('Pas de connexion réseau.');return false}
+  const btn=$('syncNowBtn');
+  if(btn){btn.disabled=true;btn.classList.add('spinning')}
+  try{
+    await loadReferenceData();
+    await loadCalendarEvents();
+    renderCalendar();
+    if(roleCanManageTeam()){
+      renderTeamUsers();
+      if(currentMainView==='team')await refreshTeamSchedule();
+    }
+    if(currentMainView==='dashboard'){
+      await refreshDashboardPlanning();
+      renderDashboardGroups();
+      renderDashboardParticipants();
+    }
+    buildLocalNotifications();
+    lastSuccessfulSync=new Date();
+    if(showMessage)showToast('Données synchronisées.');
+    return true;
+  }catch(err){
+    console.error('Synchronisation',err);
+    if(showMessage)showToast(`Synchronisation impossible : ${err?.message||err}`,6000);
+    return false;
+  }finally{
+    if(btn){btn.disabled=false;btn.classList.remove('spinning')}
+  }
+}
+
+function browserLabel(){
+  const ua=navigator.userAgent||'';
+  if(/Android/i.test(ua))return 'Android';
+  if(/iPhone|iPad/i.test(ua))return 'iOS/iPadOS';
+  if(/Windows/i.test(ua))return 'Windows';
+  if(/Macintosh/i.test(ua))return 'macOS';
+  return 'Navigateur Web';
+}
+async function runDiagnostics(showMessage=true){
+  const rows=[];
+  const add=(label,value,ok=true)=>rows.push({label,value:String(value),ok});
+  add('Version',APP_VERSION,true);
+  add('Connexion',navigator.onLine?'En ligne':'Hors ligne',navigator.onLine);
+  add('Plateforme',browserLabel(),true);
+  add('HTTPS',location.protocol==='https:'?'Oui':'Non',location.protocol==='https:');
+  add('Service Worker','serviceWorker' in navigator?'Disponible':'Indisponible','serviceWorker' in navigator);
+  add('PWA installée',window.matchMedia('(display-mode: standalone)').matches?'Oui':'Non',true);
+  add('Notifications',('Notification' in window)?Notification.permission:'Non prises en charge',('Notification' in window));
+  add('Utilisateur',currentProfile?profileName(currentProfile):'Non connecté',!!currentProfile);
+  add('Rôle',currentProfile?roleLabel(currentProfile.role):'—',!!currentProfile);
+  add('Utilisateurs chargés',profiles.length,profiles.length>0);
+  add('Groupes chargés',groups.length,true);
+  add('Types de rendez-vous',eventTypes.length,eventTypes.length>0);
+  add('Dernière synchro',lastSuccessfulSync?lastSuccessfulSync.toLocaleString('fr-FR'):'Cette session',true);
+
+  let dbOk=false;
+  try{
+    const {error}=await supabase.from('profiles').select('id',{head:true,count:'exact'}).limit(1);
+    dbOk=!error;
+  }catch{}
+  add('Accès Supabase',dbOk?'OK':'Échec',dbOk);
+
+  diagnosticsText=[
+    `Calendrier Équipe MDL v${APP_VERSION}`,
+    ...rows.map(r=>`${r.ok?'OK':'ERREUR'} | ${r.label} : ${r.value}`)
+  ].join('\n');
+
+  if($('diagnosticsSummary')){
+    $('diagnosticsSummary').innerHTML=rows.map(r=>`<div class="account-line diagnostic-line"><span>${escapeHtml(r.label)}</span><strong class="${r.ok?'diag-ok':'diag-ko'}">${escapeHtml(r.value)}</strong></div>`).join('');
+  }
+  if($('diagnosticsStatus'))$('diagnosticsStatus').textContent=dbOk?'Contrôle terminé. Aucun blocage détecté.':'Contrôle terminé avec au moins une anomalie.';
+  if(showMessage)showToast(dbOk?'Diagnostic terminé.':'Diagnostic : anomalie détectée.',5000);
+  return dbOk;
+}
+async function copyDiagnostics(){
+  if(!diagnosticsText)await runDiagnostics(false);
+  try{
+    await navigator.clipboard.writeText(diagnosticsText);
+    showToast('Diagnostic copié.');
+  }catch{
+    showToast('Copie automatique impossible.');
+  }
+}
+
 async function setMainView(view){
   const valid=['dashboard','agenda','team','groups','technicians','settings','admin'];
   if(!valid.includes(view)) return;
@@ -1545,6 +1646,9 @@ async function setMainView(view){
       renderTechniciansPage();
     } else if(view==='settings'){
       await loadMySettings();
+      await prepareWorkingHoursSettings();
+      await loadNotificationSettings();
+      await runDiagnostics(false);
     } else if(view==='admin'){
       await loadAdmin();
     }
@@ -1693,7 +1797,13 @@ async function saveWorkingHours(){
 }
 function installPwa(){
   if('serviceWorker' in navigator){
-    window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=080').catch(console.warn));
+    window.addEventListener('load',async()=>{
+      try{
+        const reg=await navigator.serviceWorker.register('./sw.js?v=100');
+        await reg.update();
+        if(reg.waiting)showToast('Une mise à jour est prête. Recharge l’application.',5000);
+      }catch(err){console.warn('Service Worker',err)}
+    });
   }
 }
 installPwa();
@@ -1974,4 +2084,11 @@ $('installPwaBtn').addEventListener('click',triggerInstallPwa);
 $('teamOnlyAbsencesBtn').addEventListener('click',()=>{teamAbsenceOnly=!teamAbsenceOnly;$('teamOnlyAbsencesBtn').classList.toggle('active',teamAbsenceOnly);$('teamFilterSummary').textContent=teamAbsenceOnly?'Filtre : absences uniquement':'';refreshTeamSchedule();});
 $('teamResetFiltersBtn').addEventListener('click',resetTeamFilters);
 
+
+$('syncNowBtn').addEventListener('click',()=>synchronizeApp(true));
+$('runDiagnosticsBtn').addEventListener('click',()=>runDiagnostics(true));
+$('copyDiagnosticsBtn').addEventListener('click',copyDiagnostics);
+
+window.addEventListener('unhandledrejection',e=>{console.error('Erreur asynchrone',e.reason);showToast(`Erreur : ${e.reason?.message||e.reason||'opération impossible'}`,6000);});
+window.addEventListener('error',e=>{console.error('Erreur JavaScript',e.error||e.message);});
 bootstrap();
