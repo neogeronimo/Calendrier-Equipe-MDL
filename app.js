@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=080';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=090';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -27,11 +27,15 @@ let dashboardRangeDays=5;
 let dashboardCursor=new Date();
 let dashboardSelectedIds=new Set();
 let dashboardSlotData=[];
+let localNotifications=[];
+let deferredInstallPrompt=null;
+let teamAbsenceOnly=false;
+let notificationTimer=null;
 let schedulingSettings = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.8.0 · ${message}`;
+  if (box) box.textContent = `Version 0.9.0 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -121,7 +125,7 @@ async function loadReferenceData() {
 
 function showAppShell() {
   $('loginView').hidden = true; $('appView').hidden = false;
-  setTimeout(()=>{updateHeaderIdentity();initDashboardBindings();setMainView('dashboard');},0);
+  setTimeout(()=>{updateHeaderIdentity();initDashboardBindings();setMainView('dashboard');startNotificationLoop();},0);
   const first = currentProfile?.first_name?.trim();
   $('welcomeTitle').textContent = first ? `Bonjour ${first}` : `Bonjour ${profileName(currentProfile)}`;
   if($('adminTab')) $('adminTab').hidden = !roleCanManageUsers();
@@ -418,7 +422,7 @@ async function saveEvent(e) {
 async function deleteEvent() {
   const id=$('eventId').value;if(!id)return;if(!confirm('Supprimer définitivement ce rendez-vous ?'))return;
   const {error}=await supabase.from('events').delete().eq('id',id); if(error){$('eventFormError').textContent=error.message;$('eventFormError').hidden=false;return;}
-  $('eventDialog').close();showToast('Rendez-vous supprimé.');await loadCalendarEvents();renderCalendar();
+  $('eventDialog').close();showToast('Rendez-vous supprimé.');await loadCalendarEvents();renderCalendar();buildLocalNotifications();
 }
 
 
@@ -697,6 +701,7 @@ function renderTeamSchedule(ids,start,days) {
       const list=teamEvents.filter(ev=>{
         const typeFilter=$('teamEventTypeFilter')?.value||'';
         const statusFilter=$('teamEventStatusFilter')?.value||'';
+        if(teamAbsenceOnly && !isAbsenceEvent(ev))return false;
         if(typeFilter && ev.event_type_id!==typeFilter)return false;
         if(statusFilter && ev.status!==statusFilter)return false;
         const applies=ev.owner_id===user.id || (ev.participant_user_ids||[]).includes(user.id);
@@ -735,7 +740,7 @@ function renderTeamSchedule(ids,start,days) {
         ].filter(Boolean).join(' · ');
 
         html+=`<button
-          class="team-event-chip ${participantOnly?'participant-event':''}"
+          class="team-event-chip ${participantOnly?'participant-event':''} ${isAbsenceEvent(ev)?'absence-event':''}"
           data-team-event="${ev.id}"
           title="${escapeHtml(tooltip)}"
           style="border-left-color:${escapeHtml(eventColor(ev))}">
@@ -1628,7 +1633,7 @@ async function saveAbsence(e){
     title:$('absenceTitle').value.trim()||'Absence',
     description:$('absenceDescription').value.trim()||null,
     location:null,starts_at:a.toISOString(),ends_at:b.toISOString(),
-    all_day:true,status:'confirmed',visibility:'normal'
+    all_day:true,status:$('absenceTentative').checked?'tentative':'confirmed',visibility:'normal'
   };
   const {error}=await supabase.from('events').insert(payload);
   if(error){$('absenceError').textContent=error.message;$('absenceError').hidden=false;return}
@@ -1692,6 +1697,136 @@ function installPwa(){
   }
 }
 installPwa();
+
+
+function isAbsenceEvent(ev){
+  const t=eventTypes.find(x=>x.id===ev.event_type_id);
+  return !!(ev.all_day && /absence|congé|conge|rtt|repos/i.test(`${ev.title||''} ${t?.name||''}`));
+}
+function notificationPrefs(){
+  try{return JSON.parse(localStorage.getItem('mdl_notification_prefs')||'{}')}catch{return{}}
+}
+function saveNotificationPrefs(p){
+  localStorage.setItem('mdl_notification_prefs',JSON.stringify(p));
+}
+function notificationReadIds(){
+  try{return new Set(JSON.parse(localStorage.getItem('mdl_notification_read')||'[]'))}catch{return new Set()}
+}
+function saveNotificationReadIds(set){
+  localStorage.setItem('mdl_notification_read',JSON.stringify([...set].slice(-200)))
+}
+function buildLocalNotifications(){
+  if(!currentProfile)return [];
+  const now=new Date(), horizon=addDays(now,7);
+  const relevant=(events||[]).filter(ev=>new Date(ev.ends_at)>=now&&new Date(ev.starts_at)<=horizon&&ev.status!=='cancelled');
+  const notes=[];
+  for(const ev of relevant){
+    if(isAbsenceEvent(ev)){
+      notes.push({id:`absence-${ev.id}`,kind:'absence',icon:'☂',title:ev.title||'Absence',detail:`${fmtDate(new Date(ev.starts_at),{day:'2-digit',month:'short'})} · ${ev.all_day?'Journée entière':fmtTime(new Date(ev.starts_at))}`,event_id:ev.id,time:new Date(ev.starts_at)});
+    }else{
+      notes.push({id:`event-${ev.id}`,kind:'event',icon:'▣',title:ev.title||'Rendez-vous',detail:`${fmtDate(new Date(ev.starts_at),{weekday:'short',day:'2-digit',month:'short'})} · ${ev.all_day?'Journée entière':fmtTime(new Date(ev.starts_at))}`,event_id:ev.id,time:new Date(ev.starts_at)});
+    }
+  }
+  localNotifications=notes.sort((a,b)=>a.time-b.time);
+  renderNotificationUi();
+  return localNotifications;
+}
+function renderNotificationUi(){
+  if(!$('notificationDrawerList'))return;
+  const read=notificationReadIds();
+  const unread=localNotifications.filter(n=>!read.has(n.id)).length;
+  $('notificationBadge').hidden=!unread;
+  $('notificationBadge').textContent=unread>99?'99+':String(unread);
+
+  const rows=localNotifications.slice(0,20).map(n=>`<button class="notification-item ${read.has(n.id)?'':'unread'}" data-note-event="${n.event_id}" data-note-id="${n.id}">
+    <strong>${n.icon} ${escapeHtml(n.title)}</strong><small>${escapeHtml(n.detail)}</small>
+  </button>`).join('')||'<div class="empty">Aucune notification.</div>';
+  $('notificationDrawerList').innerHTML=rows;
+
+  if($('dashboardAlerts')){
+    $('dashboardAlerts').innerHTML=localNotifications.slice(0,4).map(n=>`<div class="alert-mini"><div class="alert-mini-icon">${n.icon}</div><div><strong>${escapeHtml(n.title)}</strong><small>${escapeHtml(n.detail)}</small></div></div>`).join('')||'<div class="empty">Aucune alerte.</div>';
+  }
+
+  document.querySelectorAll('[data-note-event]').forEach(b=>b.addEventListener('click',()=>{
+    const set=notificationReadIds();set.add(b.dataset.noteId);saveNotificationReadIds(set);renderNotificationUi();
+    $('notificationDrawer').hidden=true;openEventById(b.dataset.noteEvent);
+  }));
+}
+async function maybeSendBrowserReminder(){
+  const prefs=notificationPrefs();
+  if(!prefs.enabled || Notification.permission!=='granted')return;
+  const reminder=Number(prefs.minutes||30);
+  const now=Date.now(),max=now+reminder*60000;
+  const sentKey='mdl_notification_sent';
+  let sent;try{sent=new Set(JSON.parse(sessionStorage.getItem(sentKey)||'[]'))}catch{sent=new Set()}
+  for(const ev of events||[]){
+    const start=new Date(ev.starts_at).getTime();
+    if(ev.all_day||ev.status==='cancelled'||start<now||start>max||sent.has(ev.id))continue;
+    new Notification(ev.title||'Rendez-vous',{
+      body:`Dans ${Math.max(1,Math.round((start-now)/60000))} min${ev.location?` · ${ev.location}`:''}`,
+      icon:'icons/icon-192.png',
+      tag:`mdl-${ev.id}`
+    });
+    sent.add(ev.id);
+  }
+  sessionStorage.setItem(sentKey,JSON.stringify([...sent]));
+}
+function startNotificationLoop(){
+  clearInterval(notificationTimer);
+  buildLocalNotifications();
+  maybeSendBrowserReminder();
+  notificationTimer=setInterval(()=>{buildLocalNotifications();maybeSendBrowserReminder()},60000);
+}
+async function loadNotificationSettings(){
+  const p=notificationPrefs();
+  $('notificationsEnabled').checked=!!p.enabled;
+  $('notificationReminderMinutes').value=String(p.minutes||30);
+  $('notifyMeetingChanges').checked=p.changes!==false;
+  const perm=('Notification' in window)?Notification.permission:'unsupported';
+  $('notificationSettingsStatus').textContent=`Autorisation navigateur : ${perm}`;
+  renderPwaStatus();
+}
+async function saveNotificationSettings(){
+  let enabled=$('notificationsEnabled').checked;
+  if(enabled && 'Notification' in window && Notification.permission!=='granted'){
+    const permission=await Notification.requestPermission();
+    if(permission!=='granted')enabled=false;
+  }
+  saveNotificationPrefs({enabled,minutes:Number($('notificationReminderMinutes').value),changes:$('notifyMeetingChanges').checked});
+  $('notificationsEnabled').checked=enabled;
+  $('notificationSettingsStatus').textContent=enabled?'Notifications activées.':'Notifications désactivées.';
+  startNotificationLoop();
+}
+function testNotification(){
+  if(!('Notification' in window)){showToast('Notifications non prises en charge.');return}
+  if(Notification.permission==='granted')new Notification('Calendrier Équipe MDL',{body:'Les notifications fonctionnent correctement.',icon:'icons/icon-192.png'});
+  else showToast('Active d’abord les notifications.');
+}
+function renderPwaStatus(){
+  if(!$('pwaStatus'))return;
+  const standalone=window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;
+  $('pwaStatus').innerHTML=`<div class="account-line"><span>Mode</span><strong>${standalone?'Application installée':'Navigateur'}</strong></div>
+  <div class="account-line"><span>Service Worker</span><strong>${'serviceWorker' in navigator?'Disponible':'Non disponible'}</strong></div>
+  <div class="account-line"><span>Notifications</span><strong>${'Notification' in window?Notification.permission:'Non prises en charge'}</strong></div>`;
+  $('installPwaBtn').hidden=standalone || !deferredInstallPrompt;
+}
+async function triggerInstallPwa(){
+  if(!deferredInstallPrompt){showToast('Utilise “Ajouter à l’écran d’accueil” dans le menu du navigateur.');return}
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt=null;renderPwaStatus();
+}
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstallPrompt=e;renderPwaStatus()});
+window.addEventListener('appinstalled',()=>{deferredInstallPrompt=null;renderPwaStatus();showToast('Application installée.')});
+
+function resetTeamFilters(){
+  if($('teamEventTypeFilter'))$('teamEventTypeFilter').value='';
+  if($('teamEventStatusFilter'))$('teamEventStatusFilter').value='';
+  teamAbsenceOnly=false;
+  $('teamOnlyAbsencesBtn').classList.remove('active');
+  $('teamFilterSummary').textContent='';
+  refreshTeamSchedule();
+}
 
 async function bootstrap() {
   try { setStatus('vérification de la session…'); const {data:{session},error}=await supabase.auth.getSession(); if(error)throw error;if(!session){showLogin();setStatus('aucune session · veuillez vous connecter.');return;}await enterApplication(session); }
@@ -1781,7 +1916,7 @@ $('groupForm').addEventListener('submit',async e=>{
   await loadAdmin();
   showToast('Groupe créé.');
 });
-document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','settingsPanel','adminPanel'].forEach(id=>{const el=$(id);if(el)el.hidden=true});currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team'){renderTeamUsers();await refreshTeamSchedule();}if(currentMainView==='settings'){await loadMySettings();await prepareWorkingHoursSettings();}if(currentMainView==='admin')await loadAdmin();}));
+document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','settingsPanel','adminPanel'].forEach(id=>{const el=$(id);if(el)el.hidden=true});currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team'){renderTeamUsers();await refreshTeamSchedule();}if(currentMainView==='settings'){await loadMySettings();await prepareWorkingHoursSettings();await loadNotificationSettings();}if(currentMainView==='admin')await loadAdmin();}));
 
 
 $('quickAbsenceBtn').addEventListener('click',openAbsenceDialog);
@@ -1795,5 +1930,17 @@ $('saveWorkingHoursBtn').addEventListener('click',saveWorkingHours);
 $('workingHoursUser').addEventListener('change',loadWorkingHours);
 if($('teamEventTypeFilter')) $('teamEventTypeFilter').addEventListener('change',refreshTeamSchedule);
 if($('teamEventStatusFilter')) $('teamEventStatusFilter').addEventListener('change',refreshTeamSchedule);
+
+
+$('notificationBellBtn').addEventListener('click',()=>{$('notificationDrawer').hidden=!$('notificationDrawer').hidden;});
+$('closeNotificationDrawerBtn').addEventListener('click',()=>{$('notificationDrawer').hidden=true;});
+$('markNotificationsReadBtn').addEventListener('click',()=>{const set=new Set(localNotifications.map(n=>n.id));saveNotificationReadIds(set);renderNotificationUi();});
+$('drawerSettingsBtn').addEventListener('click',()=>{$('notificationDrawer').hidden=true;setMainView('settings');});
+$('openNotificationSettingsBtn').addEventListener('click',()=>setMainView('settings'));
+$('saveNotificationSettingsBtn').addEventListener('click',saveNotificationSettings);
+$('testNotificationBtn').addEventListener('click',testNotification);
+$('installPwaBtn').addEventListener('click',triggerInstallPwa);
+$('teamOnlyAbsencesBtn').addEventListener('click',()=>{teamAbsenceOnly=!teamAbsenceOnly;$('teamOnlyAbsencesBtn').classList.toggle('active',teamAbsenceOnly);$('teamFilterSummary').textContent=teamAbsenceOnly?'Filtre : absences uniquement':'';refreshTeamSchedule();});
+$('teamResetFiltersBtn').addEventListener('click',resetTeamFilters);
 
 bootstrap();

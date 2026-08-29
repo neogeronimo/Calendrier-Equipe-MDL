@@ -7,10 +7,10 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="manifest" href="manifest.webmanifest?v=080" />
+  <link rel="manifest" href="manifest.webmanifest?v=090" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="styles.css?v=080" />
+  <link rel="stylesheet" href="styles.css?v=090" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -26,7 +26,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.8.0 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.9.0 · prête.</div>
     </section>
   </main>
 
@@ -84,6 +84,7 @@
         </div>
         <div class="top-actions">
           <button class="top-icon" id="themeDecorBtn" type="button" aria-label="Apparence">☼</button>
+          <button class="top-icon notification-bell" id="notificationBellBtn" type="button" aria-label="Notifications">🔔<span id="notificationBadge" class="notification-badge" hidden>0</span></button>
           <button class="top-icon" type="button" aria-label="Aide">?</button>
           <div class="user-card">
             <div class="avatar-fallback" id="headerAvatar">P</div>
@@ -185,6 +186,11 @@
                   </div>
                   <button id="dashSearchAvailabilityBtn" class="primary wide">Rechercher les disponibilités</button>
                 </div>
+              </article>
+
+              <article class="premium-card">
+                <div class="premium-head compact"><h3>Centre d’alertes</h3><button id="openNotificationSettingsBtn" class="text-btn">Réglages</button></div>
+                <div id="dashboardAlerts" class="alert-list"></div>
               </article>
 
               <article class="premium-card">
@@ -300,6 +306,11 @@
             </div>
             <div class="export-menu"><button id="exportTeamBtn" class="ghost">Excel</button><button id="exportTeamCsvBtn" class="ghost">CSV</button><button id="exportTeamIcsBtn" class="ghost">ICS</button></div>
           </div>
+          <div class="planning-actions-row">
+            <button id="teamOnlyAbsencesBtn" class="ghost">Absences uniquement</button>
+            <button id="teamResetFiltersBtn" class="ghost">Réinitialiser les filtres</button>
+            <span id="teamFilterSummary" class="muted"></span>
+          </div>
           <div id="teamPlanningStats" class="team-planning-stats" hidden></div>
           <div id="teamSchedule" class="team-schedule">
             <div class="empty">Sélectionne des techniciens pour afficher leurs plannings.</div>
@@ -376,6 +387,30 @@
           <div class="card-head"><h3>Mon compte</h3></div>
           <div id="myAccountSummary" class="account-summary"></div>
         </article>
+        <article class="card">
+          <div class="card-head"><div><h3>Notifications</h3><p class="muted admin-note">Rappels locaux sur PC et mobile lorsque l’application est ouverte ou installée.</p></div></div>
+          <label class="toggle-row"><input id="notificationsEnabled" type="checkbox" /><span><strong>Activer les notifications</strong><small>Le navigateur demandera ton autorisation.</small></span></label>
+          <label>Rappel avant rendez-vous
+            <select id="notificationReminderMinutes">
+              <option value="5">5 minutes</option>
+              <option value="10">10 minutes</option>
+              <option value="15">15 minutes</option>
+              <option value="30" selected>30 minutes</option>
+              <option value="60">1 heure</option>
+            </select>
+          </label>
+          <label class="toggle-row"><input id="notifyMeetingChanges" type="checkbox" checked /><span><strong>Réunions et modifications</strong><small>Signale les prochains rendez-vous visibles dans ton calendrier.</small></span></label>
+          <button id="saveNotificationSettingsBtn" class="primary">Enregistrer les notifications</button>
+          <button id="testNotificationBtn" class="ghost">Tester une notification</button>
+          <p id="notificationSettingsStatus" class="muted"></p>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><div><h3>Application mobile</h3><p class="muted admin-note">Installation PWA et état de l’application.</p></div></div>
+          <div id="pwaStatus" class="account-summary"></div>
+          <button id="installPwaBtn" class="primary" hidden>Installer l’application</button>
+        </article>
+
         <article class="card working-hours-card">
           <div class="card-head">
             <div><h3>Horaires individuels</h3><p class="muted admin-note">Utilisés par la recherche de disponibilités.</p></div>
@@ -457,6 +492,19 @@
   </div>
 </div>
 
+
+<div id="notificationDrawer" class="notification-drawer" hidden>
+  <div class="notification-drawer-head">
+    <div><span class="eyebrow">Centre d’alertes</span><h3>Notifications</h3></div>
+    <button id="closeNotificationDrawerBtn" class="icon-btn">×</button>
+  </div>
+  <div id="notificationDrawerList" class="notification-drawer-list"></div>
+  <div class="notification-drawer-footer">
+    <button id="markNotificationsReadBtn" class="ghost">Tout marquer comme lu</button>
+    <button id="drawerSettingsBtn" class="primary">Réglages</button>
+  </div>
+</div>
+
 <dialog id="absenceDialog">
   <form id="absenceForm" class="stack dialog-card">
     <div class="dialog-title-row">
@@ -477,6 +525,7 @@
       <label>Au<input id="absenceEnd" type="date" required /></label>
     </div>
     <label>Commentaire<textarea id="absenceDescription" rows="3"></textarea></label>
+    <label class="toggle-row"><input id="absenceTentative" type="checkbox" /><span><strong>Absence provisoire</strong><small>Elle apparaîtra comme provisoire dans le planning.</small></span></label>
     <p id="absenceError" class="error" hidden></p>
     <div class="dialog-actions">
       <button type="button" id="cancelAbsenceBtn" class="ghost">Annuler</button>
@@ -614,7 +663,7 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=080"></script>
+  <script type="module" src="app.js?v=090"></script>
 
   <dialog id="eventTypeDialog">
     <form id="eventTypeForm" class="stack dialog-card">
