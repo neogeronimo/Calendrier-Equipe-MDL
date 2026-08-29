@@ -1,39 +1,42 @@
-CALENDRIER ÉQUIPE MDL v0.9.0 — NOTIFICATIONS & FINITIONS
+CALENDRIER ÉQUIPE MDL v0.9.1 — ANDROID CONFORT
 
-GROS LOT V9
+CORRECTIFS PRINCIPAUX
 
-NOTIFICATIONS
-- Centre d'alertes dans le bandeau.
-- Badge de notifications non lues.
-- Alertes intégrées au dashboard.
-- Préférences de notification dans Mes réglages.
-- Rappel navigateur configurable : 5 / 10 / 15 / 30 / 60 minutes.
-- Notification de test.
-- Les préférences sont conservées localement sur l'appareil.
-- Les rappels fonctionnent lorsque l'application est ouverte/installée.
-  Les vraies notifications push en arrière-plan via Firebase/FCM viendront dans le lot production.
+1. NOTIFICATIONS ANDROID
+La v0.9.0 utilisait principalement new Notification(), qui n'est pas la voie
+fiable sur Android. La v0.9.1 passe par le Service Worker et
+registration.showNotification().
 
-ABSENCES
-- Absence dédiée conservée.
-- Possibilité de marquer une absence comme provisoire.
-- Style spécifique dans le planning.
-- Filtre "Absences uniquement" dans Planning équipe.
-- Réinitialisation rapide des filtres.
+Le bouton "Tester une notification" doit maintenant produire une vraie
+notification système Android si l'autorisation est accordée.
 
-PWA / MOBILE
-- État de l'installation dans Mes réglages.
-- Bouton Installer l'application lorsque le navigateur expose l'installation.
-- Service worker/cache versionné v0.9.
-- Centre d'alertes adapté au téléphone.
-- Navigation mobile et actions rapides conservées.
+Une vibration courte est demandée lorsque l'appareil l'autorise.
 
-ADMINISTRATION / SÉCURITÉ
-- Les règles existantes restent inchangées.
-- Un fichier SQL OPTIONNEL permet de préparer un futur journal d'audit admin.
-- Ne pas exécuter ce SQL pour tester la v0.9.0 : il n'est pas requis.
+IMPORTANT :
+Le son d'une notification Web/PWA est contrôlé par Android et par le canal
+de notification du navigateur/PWA. Une application Web ne peut pas imposer
+fiablement sa propre sonnerie.
 
-INSTALLATION POUR TEST
-Aucun SQL obligatoire.
+Pour vérifier :
+Paramètres Android > Applications > Calendrier MDL ou Chrome >
+Notifications > autoriser les notifications et vérifier que le canal n'est
+pas en mode silencieux.
+
+2. INTERFACE MOBILE
+Refonte "Android Confort" automatique sous 860 px :
+- police générale beaucoup plus grande
+- boutons tactiles plus hauts
+- KPI lisibles
+- cartes et formulaires agrandis
+- notifications plus lisibles
+- dialogues presque plein écran
+- navigation basse plus grande
+- planning horizontal conservé mais avec textes et événements agrandis
+- zones de saisie dimensionnées pour le tactile
+- meilleure prise en compte de la safe area
+
+3. INSTALLATION
+Aucun SQL.
 Aucune Edge Function.
 
 Sur GitHub remplacer :
@@ -43,16 +46,16 @@ Sur GitHub remplacer :
 - manifest.webmanifest
 - sw.js
 
-Puis attendre GitHub Pages.
-PC : Ctrl+F5.
-Mobile : fermer/réouvrir le site ou vider l'ancien onglet si nécessaire.
+ATTENTION AU CACHE PWA
+Après publication :
+- fermer complètement l'application PWA
+- la rouvrir
+- si l'ancienne interface reste affichée, supprimer l'application de l'écran
+  d'accueil puis la réinstaller une fois.
 
-À TESTER
-1. Tableau de bord.
-2. Menu latéral / navigation mobile.
-3. Création rendez-vous.
-4. Déclaration absence, y compris provisoire.
-5. Filtre Absences uniquement.
-6. Mes réglages > Horaires individuels.
-7. Mes réglages > Notifications > Autoriser > Tester.
-8. Installation PWA / Ajouter à l'écran d'accueil.
+TEST CONSEILLÉ
+- Mes réglages > Notifications > Activer
+- accepter l'autorisation Android
+- cliquer "Tester une notification"
+- tester le dashboard et le planning en portrait
+- tester la création d'un rendez-vous et d'une absence

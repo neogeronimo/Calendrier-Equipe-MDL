@@ -6,7 +6,7 @@
   "display": "standalone",
   "background_color": "#f5f7fb",
   "theme_color": "#5b45e8",
-  "description": "Planning partagé, disponibilités, groupes et absences de l’équipe MDL.",
+  "description": "Planning partagé MDL optimisé Android, disponibilités, groupes, absences et rappels.",
   "icons": [
     {
       "src": "icons/icon-192.png",

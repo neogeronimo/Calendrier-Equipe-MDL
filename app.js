@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=090';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=091';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -35,7 +35,7 @@ let schedulingSettings = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.9.0 · ${message}`;
+  if (box) box.textContent = `Version 0.9.1 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -1752,9 +1752,35 @@ function renderNotificationUi(){
     $('notificationDrawer').hidden=true;openEventById(b.dataset.noteEvent);
   }));
 }
+async function showSystemNotification(title,options={}){
+  if(!('Notification' in window) || Notification.permission!=='granted')return false;
+  const opts={
+    icon:'icons/icon-192.png',
+    badge:'icons/icon-192.png',
+    vibrate:[180,80,180],
+    requireInteraction:false,
+    ...options
+  };
+  try{
+    if('serviceWorker' in navigator){
+      const reg=await navigator.serviceWorker.ready;
+      await reg.showNotification(title,opts);
+      if('vibrate' in navigator)navigator.vibrate([120,60,120]);
+      return true;
+    }
+  }catch(err){ console.warn('Notification Service Worker impossible',err); }
+  try{
+    // Secours desktop. Sur Android, la voie Service Worker ci-dessus est privilégiée.
+    new Notification(title,opts);
+    return true;
+  }catch(err){
+    console.warn('Notification navigateur impossible',err);
+    return false;
+  }
+}
 async function maybeSendBrowserReminder(){
   const prefs=notificationPrefs();
-  if(!prefs.enabled || Notification.permission!=='granted')return;
+  if(!prefs.enabled || !('Notification' in window) || Notification.permission!=='granted')return;
   const reminder=Number(prefs.minutes||30);
   const now=Date.now(),max=now+reminder*60000;
   const sentKey='mdl_notification_sent';
@@ -1762,12 +1788,12 @@ async function maybeSendBrowserReminder(){
   for(const ev of events||[]){
     const start=new Date(ev.starts_at).getTime();
     if(ev.all_day||ev.status==='cancelled'||start<now||start>max||sent.has(ev.id))continue;
-    new Notification(ev.title||'Rendez-vous',{
+    const ok=await showSystemNotification(ev.title||'Rendez-vous',{
       body:`Dans ${Math.max(1,Math.round((start-now)/60000))} min${ev.location?` · ${ev.location}`:''}`,
-      icon:'icons/icon-192.png',
-      tag:`mdl-${ev.id}`
+      tag:`mdl-${ev.id}`,
+      data:{eventId:ev.id,url:location.href}
     });
-    sent.add(ev.id);
+    if(ok)sent.add(ev.id);
   }
   sessionStorage.setItem(sentKey,JSON.stringify([...sent]));
 }
@@ -1775,7 +1801,7 @@ function startNotificationLoop(){
   clearInterval(notificationTimer);
   buildLocalNotifications();
   maybeSendBrowserReminder();
-  notificationTimer=setInterval(()=>{buildLocalNotifications();maybeSendBrowserReminder()},60000);
+  notificationTimer=setInterval(()=>{buildLocalNotifications();maybeSendBrowserReminder()},30000);
 }
 async function loadNotificationSettings(){
   const p=notificationPrefs();
@@ -1783,7 +1809,7 @@ async function loadNotificationSettings(){
   $('notificationReminderMinutes').value=String(p.minutes||30);
   $('notifyMeetingChanges').checked=p.changes!==false;
   const perm=('Notification' in window)?Notification.permission:'unsupported';
-  $('notificationSettingsStatus').textContent=`Autorisation navigateur : ${perm}`;
+  $('notificationSettingsStatus').textContent=`Autorisation : ${perm}${/Android/i.test(navigator.userAgent)?' · Android détecté':''}`;
   renderPwaStatus();
 }
 async function saveNotificationSettings(){
@@ -1797,10 +1823,15 @@ async function saveNotificationSettings(){
   $('notificationSettingsStatus').textContent=enabled?'Notifications activées.':'Notifications désactivées.';
   startNotificationLoop();
 }
-function testNotification(){
+async function testNotification(){
   if(!('Notification' in window)){showToast('Notifications non prises en charge.');return}
-  if(Notification.permission==='granted')new Notification('Calendrier Équipe MDL',{body:'Les notifications fonctionnent correctement.',icon:'icons/icon-192.png'});
-  else showToast('Active d’abord les notifications.');
+  if(Notification.permission!=='granted'){showToast('Active d’abord les notifications.');return}
+  const ok=await showSystemNotification('Calendrier Équipe MDL',{
+    body:'Test Android réussi. Si aucun son n’est joué, vérifie le canal de notifications Android.',
+    tag:'mdl-test',
+    data:{url:location.href}
+  });
+  showToast(ok?'Notification de test envoyée.':'Impossible d’afficher la notification.');
 }
 function renderPwaStatus(){
   if(!$('pwaStatus'))return;

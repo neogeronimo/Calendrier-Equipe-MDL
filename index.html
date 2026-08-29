@@ -7,10 +7,10 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="manifest" href="manifest.webmanifest?v=090" />
+  <link rel="manifest" href="manifest.webmanifest?v=091" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="styles.css?v=090" />
+  <link rel="stylesheet" href="styles.css?v=091" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -26,7 +26,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.9.0 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.9.1 · prête.</div>
     </section>
   </main>
 
@@ -388,7 +388,7 @@
           <div id="myAccountSummary" class="account-summary"></div>
         </article>
         <article class="card">
-          <div class="card-head"><div><h3>Notifications</h3><p class="muted admin-note">Rappels locaux sur PC et mobile lorsque l’application est ouverte ou installée.</p></div></div>
+          <div class="card-head"><div><h3>Notifications</h3><p class="muted admin-note">Rappels Android/PC via le Service Worker. Sur mobile, le son reste géré par Android.</p></div></div>
           <label class="toggle-row"><input id="notificationsEnabled" type="checkbox" /><span><strong>Activer les notifications</strong><small>Le navigateur demandera ton autorisation.</small></span></label>
           <label>Rappel avant rendez-vous
             <select id="notificationReminderMinutes">
@@ -663,7 +663,7 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=090"></script>
+  <script type="module" src="app.js?v=091"></script>
 
   <dialog id="eventTypeDialog">
     <form id="eventTypeForm" class="stack dialog-card">
