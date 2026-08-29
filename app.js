@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=100';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=101';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -32,13 +32,13 @@ let deferredInstallPrompt=null;
 let teamAbsenceOnly=false;
 let notificationTimer=null;
 let schedulingSettings = null;
-const APP_VERSION='1.0.0';
+const APP_VERSION='1.0.1';
 let lastSuccessfulSync=null;
 let diagnosticsText='';
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 1.0.0 · ${message}`;
+  if (box) box.textContent = `Version 1.0.1 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -1031,12 +1031,18 @@ async function saveMySharing(){
 }
 function renderEventTypesAdmin(){
   if(!$('eventTypesAdminList'))return;
-  $('eventTypesAdminList').innerHTML=eventTypes.length?eventTypes.map(t=>`
-    <div class="simple-row type-admin-row">
-      <div><span class="type-color-dot" style="background:${escapeHtml(t.color||'#5b4fd6')}"></span><strong>${escapeHtml(t.name)}</strong><div class="muted tiny">${escapeHtml(t.description||'')}</div></div>
-      <button class="ghost" data-edit-type="${t.id}">Modifier</button>
-    </div>`).join(''):'<div class="empty">Aucun type.</div>';
+  $('eventTypesAdminList').innerHTML=eventTypes.length?eventTypes.map(t=>{
+    const used=(events||[]).filter(ev=>ev.event_type_id===t.id).length;
+    return `<div class="simple-row type-admin-row">
+      <div><span class="type-color-dot" style="background:${escapeHtml(t.color||'#5b4fd6')}"></span><strong>${escapeHtml(t.name)}</strong><div class="muted tiny">${escapeHtml(t.description||'')}${used?` · ${used} rendez-vous`:''}</div></div>
+      <div class="admin-row-actions">
+        <button class="ghost" data-edit-type="${t.id}">Modifier</button>
+        <button class="danger-btn compact-danger" data-direct-delete-type="${t.id}">Supprimer</button>
+      </div>
+    </div>`;
+  }).join(''):'<div class="empty">Aucun type.</div>';
   document.querySelectorAll('[data-edit-type]').forEach(b=>b.addEventListener('click',()=>openEventTypeDialog(b.dataset.editType)));
+  document.querySelectorAll('[data-direct-delete-type]').forEach(b=>b.addEventListener('click',()=>deleteEventTypeById(b.dataset.directDeleteType)));
 }
 function openEventTypeDialog(id=null){
   const t=id?eventTypes.find(x=>x.id===id):null;
@@ -1058,12 +1064,30 @@ async function saveEventTypeAdmin(e){
   if(res.error){$('eventTypeAdminError').textContent=res.error.message;$('eventTypeAdminError').hidden=false;return;}
   $('eventTypeDialog').close();await loadReferenceData();renderEventTypesAdmin();showToast('Type enregistré.');
 }
+async function deleteEventTypeById(id,fromDialog=false){
+  const t=eventTypes.find(x=>x.id===id);if(!t)return;
+  if(!isAdmin()){showToast('Seul un administrateur peut supprimer un type de rendez-vous.');return}
+  const used=(events||[]).filter(ev=>ev.event_type_id===id).length;
+  const msg=used
+    ? `Le type « ${t.name} » est utilisé par ${used} rendez-vous.\n\nLes rendez-vous seront conservés, mais leur catégorie sera retirée.\n\nSaisis SUPPRIMER pour confirmer :`
+    : `Supprimer définitivement le type « ${t.name} » ?\n\nSaisis SUPPRIMER pour confirmer :`;
+  if(prompt(msg)!=='SUPPRIMER')return;
+  const {data,error}=await supabase.rpc('admin_delete_event_type',{target_type_id:id});
+  if(error){
+    if(fromDialog){$('eventTypeAdminError').textContent=error.message;$('eventTypeAdminError').hidden=false;}
+    else showToast(`Suppression impossible : ${error.message}`,7000);
+    return;
+  }
+  if(fromDialog)$('eventTypeDialog').close();
+  await loadReferenceData();
+  await loadCalendarEvents();
+  renderCalendar();
+  renderEventTypesAdmin();
+  showToast(data||'Type supprimé.');
+}
 async function deleteEventTypeAdmin(){
   const id=$('eventTypeAdminId').value;if(!id)return;
-  if(!confirm('Supprimer ce type de rendez-vous ? Les rendez-vous existants conserveront leurs données mais perdront cette catégorie.'))return;
-  const {error}=await supabase.from('event_types').delete().eq('id',id);
-  if(error){$('eventTypeAdminError').textContent=error.message;$('eventTypeAdminError').hidden=false;return;}
-  $('eventTypeDialog').close();await loadReferenceData();renderEventTypesAdmin();showToast('Type supprimé.');
+  await deleteEventTypeById(id,true);
 }
 async function loadSchedulingSettings(){
   const {data,error}=await supabase.from('scheduling_settings').select('*').eq('id',1).maybeSingle();
@@ -1097,12 +1121,44 @@ async function loadAdmin() {
   }
 
   $('groupsList').innerHTML=groups.length
-    ? groups.map(g=>`<div class="list-row"><div class="row-main"><strong>${escapeHtml(g.name)}</strong><span class="badge">${g.is_active?'Actif':'Inactif'}</span></div>${g.description?`<div class="muted">${escapeHtml(g.description)}</div>`:''}</div>`).join('')
+    ? groups.map(g=>{
+        const memberCount=(profiles||[]).filter(p=>(p.group_ids||[]).includes(g.id)).length;
+        return `<div class="list-row group-admin-row">
+          <div class="row-main">
+            <div>
+              <strong>${escapeHtml(g.name)}</strong>
+              <div class="muted">${memberCount} membre${memberCount>1?'s':''}${g.description?` · ${escapeHtml(g.description)}`:''}</div>
+            </div>
+            <div class="admin-row-actions">
+              <span class="badge">${g.is_active?'Actif':'Inactif'}</span>
+              <button class="danger-btn compact-danger" data-delete-group="${g.id}">Supprimer</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('')
     : '<div class="empty">Aucun groupe.</div>';
+  $('groupsList').querySelectorAll('[data-delete-group]').forEach(b=>b.addEventListener('click',()=>deleteGroupAdmin(b.dataset.deleteGroup)));
 
   if(!usersError) renderAdminUsers();
   renderEventTypesAdmin();
   await loadSchedulingSettings();
+}
+
+
+async function deleteGroupAdmin(id){
+  if(!isAdmin()){showToast('Seul un administrateur peut supprimer un groupe.');return}
+  const g=groups.find(x=>x.id===id); if(!g)return;
+  const memberCount=(profiles||[]).filter(p=>(p.group_ids||[]).includes(id)).length;
+  const message=memberCount
+    ? `Le groupe « ${g.name} » contient ${memberCount} membre${memberCount>1?'s':''}.\n\nLa suppression retirera le groupe de ces utilisateurs et supprimera aussi les droits de planification liés à ce groupe.\n\nLes utilisateurs et leurs calendriers NE seront PAS supprimés.\n\nSaisis SUPPRIMER pour confirmer :`
+    : `Supprimer définitivement le groupe « ${g.name} » ?\n\nSaisis SUPPRIMER pour confirmer :`;
+  const typed=prompt(message);
+  if(typed!=='SUPPRIMER')return;
+  const {data,error}=await supabase.rpc('admin_delete_group',{target_group_id:id});
+  if(error){showToast(`Suppression impossible : ${error.message}`,7000);return}
+  showToast(data||'Groupe supprimé.');
+  await loadReferenceData();
+  await loadAdmin();
 }
 
 function renderAdminUsers() {
@@ -1139,7 +1195,7 @@ function renderAdminUsers() {
         <div class="user-actions">
           <button class="small-btn" data-edit-user="${u.id}" ${protectedAdmin?'disabled':''}>Modifier</button>
           <button class="ghost" data-toggle-user="${u.id}" ${self||protectedAdmin?'disabled':''}>${u.is_active?'Désactiver':'Réactiver'}</button>
-          <button class="danger-btn" data-delete-user="${u.id}" ${self||protectedAdmin?'disabled':''}>Archiver & supprimer</button>
+          <button class="danger-btn" data-delete-user="${u.id}" ${self||protectedAdmin?'disabled':''}>Supprimer</button>
         </div>
       </div>
     </div>`;
@@ -1262,7 +1318,7 @@ function openDeleteUser(id) {
   $('archiveUserBtn').disabled=false;
   $('archiveUserBtn').textContent='Exporter Excel';
   $('deleteUserError').hidden=true;
-  $('deleteUserSummary').innerHTML=`<strong>${escapeHtml(profileName(u))}</strong><div class="muted">${escapeHtml(u.email||'')}</div><p>La suppression définitive sera débloquée uniquement après la génération de l’archive Excel.</p>`;
+  $('deleteUserSummary').innerHTML=`<strong>${escapeHtml(profileName(u))}</strong><div class="muted">${escapeHtml(u.email||'')}</div><p>L’archive Excel est obligatoire avant suppression. Elle contient l’identité, les groupes et le calendrier. Les rendez-vous dont cette personne est propriétaire seront ensuite supprimés.</p>`;
   $('deleteUserDialog').showModal();
 }
 
@@ -1799,7 +1855,7 @@ function installPwa(){
   if('serviceWorker' in navigator){
     window.addEventListener('load',async()=>{
       try{
-        const reg=await navigator.serviceWorker.register('./sw.js?v=100');
+        const reg=await navigator.serviceWorker.register('./sw.js?v=101');
         await reg.update();
         if(reg.waiting)showToast('Une mise à jour est prête. Recharge l’application.',5000);
       }catch(err){console.warn('Service Worker',err)}

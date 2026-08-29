@@ -1034,3 +1034,15 @@ button,input,select,textarea{font:inherit}
 @media(max-width:430px){
   .inline-actions{grid-template-columns:1fr}
 }
+
+
+/* v1.0.1 — Administration / suppressions */
+.admin-row-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.compact-danger{min-height:36px!important;padding:7px 10px!important;font-size:.78rem!important}
+.group-admin-row .row-main{align-items:center}
+@media(max-width:860px){
+  .group-admin-row .row-main,.type-admin-row{align-items:flex-start!important}
+  .admin-row-actions{width:100%;justify-content:flex-end;margin-top:8px}
+  .compact-danger{min-height:44px!important;font-size:.84rem!important}
+  .user-actions .danger-btn{min-height:46px!important}
+}

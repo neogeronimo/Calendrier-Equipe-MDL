@@ -7,10 +7,10 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="manifest" href="manifest.webmanifest?v=100" />
+  <link rel="manifest" href="manifest.webmanifest?v=101" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="styles.css?v=100" />
+  <link rel="stylesheet" href="styles.css?v=101" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -26,7 +26,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 1.0.0 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 1.0.1 · prête.</div>
     </section>
   </main>
 
@@ -443,7 +443,7 @@
       </div>
       <div class="admin-grid">
         <article class="card">
-          <div class="card-head"><h3>Groupes</h3><button id="addGroupBtn" class="small-btn">+ Ajouter</button></div>
+          <div class="card-head"><div><h3>Groupes</h3><p class="muted admin-note">Ajout et suppression sécurisée des groupes.</p></div><button id="addGroupBtn" class="small-btn">+ Ajouter</button></div>
           <div id="groupsList" class="simple-list"></div>
         </article>
         <article class="card">
@@ -469,7 +469,7 @@
           <div id="usersList" class="simple-list"></div>
         </article>
         <article class="card">
-          <div class="card-head"><div><h3>Types de rendez-vous</h3><p class="muted admin-note">Catégories et couleurs du calendrier.</p></div><button id="addEventTypeBtn" class="small-btn">+ Ajouter</button></div>
+          <div class="card-head"><div><h3>Types de rendez-vous</h3><p class="muted admin-note">Catégories, couleurs et suppression sécurisée.</p></div><button id="addEventTypeBtn" class="small-btn">+ Ajouter</button></div>
           <div id="eventTypesAdminList" class="simple-list"></div>
         </article>
         <article class="card">
@@ -675,7 +675,7 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=100"></script>
+  <script type="module" src="app.js?v=101"></script>
 
   <dialog id="eventTypeDialog">
     <form id="eventTypeForm" class="stack dialog-card">
