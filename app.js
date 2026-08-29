@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=102';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=103';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -32,13 +32,13 @@ let deferredInstallPrompt=null;
 let teamAbsenceOnly=false;
 let notificationTimer=null;
 let schedulingSettings = null;
-const APP_VERSION='1.0.2';
+const APP_VERSION='1.0.3';
 let lastSuccessfulSync=null;
 let diagnosticsText='';
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 1.0.2 · ${message}`;
+  if (box) box.textContent = `Version 1.0.3 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -84,6 +84,16 @@ function fmtDate(d, opts={}) { return new Intl.DateTimeFormat('fr-FR', opts).for
 function fmtTime(d) { return new Intl.DateTimeFormat('fr-FR',{hour:'2-digit',minute:'2-digit'}).format(d); }
 function eventColor(ev) { return eventTypes.find(t=>t.id===ev.event_type_id)?.color || '#5b4fd6'; }
 function profileName(p) { return p?.display_name || [p?.first_name,p?.last_name].filter(Boolean).join(' ') || 'Utilisateur'; }
+
+function roleLabel(role){
+  const labels={
+    technicien:'Technicien',
+    planificateur:'Planificateur',
+    responsable:'Responsable',
+    administrateur:'Administrateur'
+  };
+  return labels[role]||role||'Utilisateur';
+}
 function groupNamesForUser(userId) {
   return memberships
     .filter(m=>m.user_id===userId)
@@ -1625,6 +1635,13 @@ async function runDiagnostics(showMessage=true){
   add('Service Worker','serviceWorker' in navigator?'Disponible':'Indisponible','serviceWorker' in navigator);
   add('PWA installée',window.matchMedia('(display-mode: standalone)').matches?'Oui':'Non',true);
   add('Notifications',('Notification' in window)?Notification.permission:'Non prises en charge',('Notification' in window));
+  let storageOk=false;
+  try{
+    localStorage.setItem('mdl_storage_test','ok');
+    storageOk=localStorage.getItem('mdl_storage_test')==='ok';
+    localStorage.removeItem('mdl_storage_test');
+  }catch{}
+  add('Mémoire locale',storageOk?'OK':'Indisponible',storageOk);
   add('Utilisateur',currentProfile?profileName(currentProfile):'Non connecté',!!currentProfile);
   add('Rôle',currentProfile?roleLabel(currentProfile.role):'—',!!currentProfile);
   add('Utilisateurs chargés',profiles.length,profiles.length>0);
@@ -1701,10 +1718,15 @@ async function setMainView(view){
     } else if(view==='technicians'){
       renderTechniciansPage();
     } else if(view==='settings'){
-      await loadMySettings();
-      await prepareWorkingHoursSettings();
-      await loadNotificationSettings();
-      await runDiagnostics(false);
+      const tasks=[
+        ['Compte',loadMySettings],
+        ['Horaires',prepareWorkingHoursSettings],
+        ['Notifications',loadNotificationSettings],
+        ['Diagnostic',()=>runDiagnostics(false)]
+      ];
+      for(const [label,fn] of tasks){
+        try{await fn()}catch(err){console.error(`Réglages ${label}`,err)}
+      }
     } else if(view==='admin'){
       await loadAdmin();
     }
@@ -1855,7 +1877,7 @@ function installPwa(){
   if('serviceWorker' in navigator){
     window.addEventListener('load',async()=>{
       try{
-        const reg=await navigator.serviceWorker.register('./sw.js?v=102');
+        const reg=await navigator.serviceWorker.register('./sw.js?v=103');
         await reg.update();
         if(reg.waiting)showToast('Une mise à jour est prête. Recharge l’application.',5000);
       }catch(err){console.warn('Service Worker',err)}
@@ -1973,22 +1995,25 @@ async function loadNotificationSettings(){
   const p=notificationPrefs();
   const permission=('Notification' in window)?Notification.permission:'unsupported';
 
-  // Android/PWA : l'autorisation système est la référence la plus fiable.
-  // Si Android a déjà accordé les notifications, on restaure automatiquement
-  // l'activation même si le stockage local a été purgé entre deux lancements.
-  const enabled=(p.enabled===true) || (p.enabled===undefined && permission==='granted') || (permission==='granted' && p.enabled!==false);
+  // L'autorisation Android et le choix utilisateur sont deux choses distinctes.
+  // Si l'utilisateur a déjà enregistré un choix, on le respecte.
+  // Si aucun choix n'existe et qu'Android a déjà autorisé les notifications,
+  // on active les rappels par défaut.
+  const hasSavedChoice=Object.prototype.hasOwnProperty.call(p,'enabled');
+  const enabled=hasSavedChoice ? p.enabled===true : permission==='granted';
 
   const normalized={
     enabled,
     minutes:Number(p.minutes||30),
-    changes:p.changes!==false
+    changes:p.changes!==false,
+    saved_at:p.saved_at||null
   };
   saveNotificationPrefs(normalized);
 
   $('notificationsEnabled').checked=normalized.enabled;
   $('notificationReminderMinutes').value=String(normalized.minutes);
   $('notifyMeetingChanges').checked=normalized.changes;
-  $('notificationSettingsStatus').textContent=`Autorisation : ${permission}${/Android/i.test(navigator.userAgent)?' · Android détecté':''}${normalized.enabled?' · rappels activés':''}`;
+  $('notificationSettingsStatus').textContent=`Autorisation : ${permission}${/Android/i.test(navigator.userAgent)?' · Android détecté':''}${normalized.enabled?' · rappels activés et mémorisés':' · rappels désactivés'}`;
   renderPwaStatus();
 }
 async function saveNotificationSettings(){
@@ -2132,7 +2157,11 @@ $('groupForm').addEventListener('submit',async e=>{
   await loadAdmin();
   showToast('Groupe créé.');
 });
-document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','settingsPanel','adminPanel'].forEach(id=>{const el=$(id);if(el)el.hidden=true});currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team'){renderTeamUsers();await refreshTeamSchedule();}if(currentMainView==='settings'){await loadMySettings();await prepareWorkingHoursSettings();await loadNotificationSettings();}if(currentMainView==='admin')await loadAdmin();}));
+document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','settingsPanel','adminPanel'].forEach(id=>{const el=$(id);if(el)el.hidden=true});currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team'){renderTeamUsers();await refreshTeamSchedule();}if(currentMainView==='settings'){
+  try{await loadMySettings()}catch(err){console.error('Réglages compte',err)}
+  try{await prepareWorkingHoursSettings()}catch(err){console.error('Réglages horaires',err)}
+  try{await loadNotificationSettings()}catch(err){console.error('Réglages notifications',err)}
+}if(currentMainView==='admin')await loadAdmin();}));
 
 
 $('quickAbsenceBtn').addEventListener('click',openAbsenceDialog);
