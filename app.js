@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=070';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=071';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -31,7 +31,7 @@ let schedulingSettings = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.7.0 · ${message}`;
+  if (box) box.textContent = `Version 0.7.1 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -124,8 +124,8 @@ function showAppShell() {
   setTimeout(()=>{updateHeaderIdentity();initDashboardBindings();setMainView('dashboard');},0);
   const first = currentProfile?.first_name?.trim();
   $('welcomeTitle').textContent = first ? `Bonjour ${first}` : `Bonjour ${profileName(currentProfile)}`;
-  $('adminTab').hidden = !roleCanManageUsers();
-  $('teamTab').hidden = !roleCanManageTeam();
+  if($('adminTab')) $('adminTab').hidden = !roleCanManageUsers();
+  if($('teamTab')) $('teamTab').hidden = !roleCanManageTeam();
 }
 function showLogin() { $('appView').hidden = true; $('loginView').hidden = false; }
 
@@ -1507,6 +1507,8 @@ function setMainView(view){
   if(view==='admin')loadAdmin();
 }
 function initDashboardBindings(){
+  if(window.__dashboardBindingsReady)return;
+  window.__dashboardBindingsReady=true;
   const today=new Date();$('dashSlotStart').value=toDateInput(today);$('dashSlotEnd').value=toDateInput(addDays(today,7));
   document.querySelectorAll('.side-link[data-view],.mobile-link[data-view]').forEach(b=>b.addEventListener('click',()=>setMainView(b.dataset.view)));
   $('quickCreateEventBtn').addEventListener('click',()=>openNewEvent(new Date()));
@@ -1614,6 +1616,6 @@ $('groupForm').addEventListener('submit',async e=>{
   await loadAdmin();
   showToast('Groupe créé.');
 });
-document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','adminPanel'].forEach(id=>$(id).hidden=true);currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team'){renderTeamUsers();await refreshTeamSchedule();}if(currentMainView==='settings')await loadMySettings();if(currentMainView==='admin')await loadAdmin();}));
+document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','settingsPanel','adminPanel'].forEach(id=>{const el=$(id);if(el)el.hidden=true});currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team'){renderTeamUsers();await refreshTeamSchedule();}if(currentMainView==='settings')await loadMySettings();if(currentMainView==='admin')await loadAdmin();}));
 
 bootstrap();

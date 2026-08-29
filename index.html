@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=070" />
+  <link rel="stylesheet" href="styles.css?v=071" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -23,7 +23,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.7.0 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.7.1 · prête.</div>
     </section>
   </main>
 
@@ -186,8 +186,145 @@
           </div>
         </section>
 
-        <section id="agendaPanel" class="main-view" hidden></section>
-        <section id="teamPanel" class="main-view" hidden></section>
+        <section id="agendaPanel" class="panel safe-bottom main-view">
+      <div class="calendar-toolbar">
+        <div>
+          <p class="eyebrow">Mon calendrier</p>
+          <h2 id="calendarTitle">Agenda</h2>
+        </div>
+        <div class="toolbar-actions">
+          <button id="prevBtn" class="icon-btn" aria-label="Précédent">‹</button>
+          <button id="todayBtn" class="ghost">Aujourd’hui</button>
+          <button id="nextBtn" class="icon-btn" aria-label="Suivant">›</button>
+          <button id="newEventBtn" class="primary">+ Rendez-vous</button>
+        </div>
+      </div>
+
+      <div class="view-switch" role="group" aria-label="Choix de la vue">
+        <button class="view-btn" data-cal-view="month">Mois</button>
+        <button class="view-btn active" data-cal-view="week">Semaine</button>
+        <button class="view-btn" data-cal-view="agenda">Agenda</button>
+      </div>
+
+      <div class="agenda-tools card">
+        <input id="agendaSearch" type="search" placeholder="Rechercher titre, lieu, description…" />
+        <select id="agendaTypeFilter"><option value="">Tous les types</option></select>
+        <select id="agendaStatusFilter">
+          <option value="">Tous les statuts</option>
+          <option value="confirmed">Confirmés</option>
+          <option value="tentative">Provisoires</option>
+          <option value="cancelled">Annulés</option>
+        </select>
+        <div class="export-menu">
+          <button id="exportAgendaXlsxBtn" class="ghost">Excel</button>
+          <button id="exportAgendaCsvBtn" class="ghost">CSV</button>
+          <button id="exportAgendaIcsBtn" class="ghost">ICS</button>
+        </div>
+      </div>
+
+      <div id="calendarHost" class="calendar-host"></div>
+    </section>
+        <section id="teamPanel" class="panel safe-bottom main-view" hidden>
+      <div class="panel-head team-head">
+        <div>
+          <p class="eyebrow">Planification</p>
+          <h2>Planning équipe</h2>
+          <p class="muted">Visualiser plusieurs techniciens, trouver un créneau commun et créer une réunion en quelques clics.</p>
+        </div>
+        <div class="toolbar-actions">
+          <button id="teamPrevBtn" class="icon-btn" aria-label="Période précédente">‹</button>
+          <button id="teamTodayBtn" class="ghost">Aujourd’hui</button>
+          <button id="teamNextBtn" class="icon-btn" aria-label="Période suivante">›</button>
+          <button id="refreshTeamBtn" class="ghost">Actualiser</button>
+        </div>
+      </div>
+
+      <div class="team-control-card card">
+        <div class="team-filter-row">
+          <label>Groupe
+            <select id="teamGroupFilter"><option value="">Tous les groupes</option></select>
+          </label>
+          <label>Mode groupe
+            <select id="teamGroupMode">
+              <option value="filter" selected>Filtrer la liste</option>
+              <option value="select_all">Sélectionner tout le groupe</option>
+            </select>
+          </label>
+          <label>Date
+            <input id="teamDate" type="date" />
+          </label>
+          <label>Affichage
+            <select id="teamRange">
+              <option value="1">1 jour</option>
+              <option value="3">3 jours</option>
+              <option value="5" selected>5 jours</option>
+              <option value="7">7 jours</option>
+            </select>
+          </label>
+          <label>Détail
+            <select id="teamDetailMode">
+              <option value="detailed" selected>Détaillé</option>
+              <option value="compact">Compact</option>
+            </select>
+          </label>
+          <div class="team-quick-actions">
+            <button id="selectAllTeamBtn" class="small-btn" type="button">Tout sélectionner</button>
+            <button id="clearTeamBtn" class="ghost" type="button">Effacer</button>
+          </div>
+        </div>
+        <div id="teamUsers" class="check-list team-user-grid"></div>
+      </div>
+
+      <div id="groupOverview" class="group-overview"></div>
+      <div class="team-workspace">
+        <article class="card team-planning-card">
+          <div class="card-head">
+            <div>
+              <h3>Calendriers sélectionnés</h3>
+              <p id="teamPlanningCaption" class="muted">Sélectionne un ou plusieurs techniciens.</p>
+            </div>
+            <div class="export-menu"><button id="exportTeamBtn" class="ghost">Excel</button><button id="exportTeamCsvBtn" class="ghost">CSV</button><button id="exportTeamIcsBtn" class="ghost">ICS</button></div>
+          </div>
+          <div id="teamPlanningStats" class="team-planning-stats" hidden></div>
+          <div id="teamSchedule" class="team-schedule">
+            <div class="empty">Sélectionne des techniciens pour afficher leurs plannings.</div>
+          </div>
+        </article>
+
+        <article class="card common-slot-card">
+          <div class="card-head"><h3>Trouver un créneau commun</h3></div>
+          <form id="slotSearchForm" class="stack compact-stack">
+            <label>Rechercher pour
+              <select id="slotGroupFilter"><option value="">Techniciens sélectionnés</option></select>
+            </label>
+            <div class="two-cols">
+              <label>Du<input id="slotStartDate" type="date" required /></label>
+              <label>Au<input id="slotEndDate" type="date" required /></label>
+            </div>
+            <div class="two-cols">
+              <label>Durée
+                <select id="slotDuration">
+                  <option value="30">30 min</option>
+                  <option value="45">45 min</option>
+                  <option value="60" selected>1 h</option>
+                  <option value="90">1 h 30</option>
+                  <option value="120">2 h</option>
+                </select>
+              </label>
+              <label>Pas
+                <select id="slotStep">
+                  <option value="15" selected>15 min</option>
+                  <option value="30">30 min</option>
+                  <option value="60">1 h</option>
+                </select>
+              </label>
+            </div>
+            <button type="submit" class="primary">Rechercher les disponibilités</button>
+          </form>
+          <div id="slotResults" class="slot-results"></div>
+        </article>
+      </div>
+    </section>
         <section id="groupsPanel" class="main-view" hidden>
           <div class="page-title"><div><span class="eyebrow">Équipe</span><h2>Groupes</h2></div></div>
           <div id="groupsPageGrid" class="group-page-grid"></div>
@@ -196,8 +333,92 @@
           <div class="page-title"><div><span class="eyebrow">Équipe</span><h2>Techniciens</h2></div></div>
           <div id="techniciansPageGrid" class="tech-page-grid"></div>
         </section>
-        <section id="settingsPanel" class="main-view" hidden></section>
-        <section id="adminPanel" class="main-view" hidden></section>
+        <section id="settingsPanel" class="panel safe-bottom main-view" hidden>
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Préférences</p>
+          <h2>Mes réglages</h2>
+          <p class="muted">Contrôle ce que les autres utilisateurs standards peuvent voir de ton calendrier.</p>
+        </div>
+      </div>
+      <div class="settings-grid">
+        <article class="card">
+          <div class="card-head"><h3>Partage de mon calendrier</h3></div>
+          <label class="toggle-row">
+            <input id="shareCalendarToggle" type="checkbox" />
+            <span><strong>Partager mon calendrier</strong><small>Les responsables et planificateurs autorisés conservent leur accès indépendamment de ce réglage.</small></span>
+          </label>
+          <label>Mode de partage
+            <select id="shareModeSelect">
+              <option value="details">Afficher les détails</option>
+              <option value="busy_only">Afficher uniquement Occupé / Libre</option>
+            </select>
+          </label>
+          <button id="saveSharingBtn" class="primary">Enregistrer mes préférences</button>
+          <p id="sharingStatus" class="muted"></p>
+        </article>
+        <article class="card">
+          <div class="card-head"><h3>Mon compte</h3></div>
+          <div id="myAccountSummary" class="account-summary"></div>
+        </article>
+      </div>
+    </section>
+        <section id="adminPanel" class="panel safe-bottom main-view" hidden>
+      <div class="panel-head">
+        <div><p class="eyebrow">Administration</p><h2>Utilisateurs & groupes</h2></div>
+        <button id="refreshAdminBtn" class="ghost">Actualiser</button>
+      </div>
+      <div class="admin-grid">
+        <article class="card">
+          <div class="card-head"><h3>Groupes</h3><button id="addGroupBtn" class="small-btn">+ Ajouter</button></div>
+          <div id="groupsList" class="simple-list"></div>
+        </article>
+        <article class="card">
+          <div class="card-head">
+            <div><h3>Utilisateurs</h3><p class="muted admin-note">Création, désactivation et archivage avant suppression.</p></div>
+            <button id="addUserBtn" class="primary">+ Nouvel utilisateur</button>
+          </div>
+          <div class="user-filters">
+            <input id="userSearch" type="search" placeholder="Rechercher un utilisateur…" />
+            <select id="userRoleFilter">
+              <option value="">Tous les rôles</option>
+              <option value="technicien">Techniciens</option>
+              <option value="planificateur">Planificateurs</option>
+              <option value="responsable">Responsables</option>
+              <option value="administrateur">Administrateurs</option>
+            </select>
+            <select id="userStatusFilter">
+              <option value="">Tous les statuts</option>
+              <option value="active">Actifs</option>
+              <option value="inactive">Désactivés</option>
+            </select>
+          </div>
+          <div id="usersList" class="simple-list"></div>
+        </article>
+        <article class="card">
+          <div class="card-head"><div><h3>Types de rendez-vous</h3><p class="muted admin-note">Catégories et couleurs du calendrier.</p></div><button id="addEventTypeBtn" class="small-btn">+ Ajouter</button></div>
+          <div id="eventTypesAdminList" class="simple-list"></div>
+        </article>
+        <article class="card">
+          <div class="card-head"><div><h3>Horaires de planification</h3><p class="muted admin-note">Valeurs par défaut utilisées par la recherche de disponibilités.</p></div></div>
+          <form id="schedulingForm" class="stack compact-stack">
+            <div class="two-cols">
+              <label>Début de journée<input id="schedDayStart" type="time" /></label>
+              <label>Fin de journée<input id="schedDayEnd" type="time" /></label>
+            </div>
+            <label class="toggle-row"><input id="schedExcludeLunch" type="checkbox" /><span><strong>Exclure la pause déjeuner</strong></span></label>
+            <div class="two-cols">
+              <label>Début pause<input id="schedLunchStart" type="time" /></label>
+              <label>Fin pause<input id="schedLunchEnd" type="time" /></label>
+            </div>
+            <label>Pas de recherche par défaut
+              <select id="schedStep"><option value="15">15 min</option><option value="30">30 min</option><option value="60">60 min</option></select>
+            </label>
+            <button class="primary" type="submit">Enregistrer les horaires</button>
+          </form>
+        </article>
+      </div>
+    </section>
       </main>
 
       <nav class="mobile-nav safe-bottom">
@@ -338,7 +559,7 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=070"></script>
+  <script type="module" src="app.js?v=071"></script>
 
   <dialog id="eventTypeDialog">
     <form id="eventTypeForm" class="stack dialog-card">
