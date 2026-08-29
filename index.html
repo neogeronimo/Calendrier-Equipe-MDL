@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=053" />
+  <link rel="stylesheet" href="styles.css?v=060" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -23,7 +23,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.5.3 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.6.0 · prête.</div>
     </section>
   </main>
 
@@ -31,16 +31,16 @@
     <header class="topbar safe-top">
       <div>
         <p class="eyebrow">Calendrier Équipe MDL</p>
-        <h1 id="welcomeTitle">Bonjour</h1>
+        <div class="welcome-block"><span class="product-kicker">Calendrier Équipe MDL</span><h1 id="welcomeTitle">Bonjour</h1><span id="roleChip" class="role-chip"></span></div>
       </div>
       <button id="logoutBtn" class="ghost">Déconnexion</button>
     </header>
 
     <nav class="tabs" aria-label="Navigation principale">
-      <button class="tab active" data-view="agenda">Mon agenda</button>
-      <button class="tab" data-view="team" id="teamTab">Équipe</button>
-      <button class="tab" data-view="settings" id="settingsTab">Mes réglages</button>
-      <button class="tab" data-view="admin" id="adminTab" hidden>Administration</button>
+      <button class="tab active" data-view="agenda"><span class="tab-icon">◫</span><span>Mon agenda</span></button>
+      <button class="tab" data-view="team" id="teamTab"><span class="tab-icon">◉</span><span>Équipe</span></button>
+      <button class="tab" data-view="settings" id="settingsTab"><span class="tab-icon">⚙</span><span>Mes réglages</span></button>
+      <button class="tab" data-view="admin" id="adminTab" hidden><span class="tab-icon">⌘</span><span>Administration</span></button>
     </nav>
 
     <section id="agendaPanel" class="panel safe-bottom">
@@ -402,7 +402,7 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=053"></script>
+  <script type="module" src="app.js?v=060"></script>
 
   <dialog id="eventTypeDialog">
     <form id="eventTypeForm" class="stack dialog-card">

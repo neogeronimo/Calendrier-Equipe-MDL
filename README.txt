@@ -1,19 +1,36 @@
-CALENDRIER ÉQUIPE MDL v0.5.3
+CALENDRIER ÉQUIPE MDL v0.6.0 — DESIGN REFRESH
 
-AJOUT : PLANIFICATION ET RECHERCHE PAR GROUPE
+OBJECTIF
+Refonte visuelle globale sans casser la logique fonctionnelle validée.
 
-NOUVEAUTÉS
-- Le planning équipe peut désormais être filtré directement par groupe.
-- Nouveau mode "Sélectionner tout le groupe".
-- Cartes de groupes avec nombre de techniciens.
-- Bouton "Afficher" pour filtrer rapidement un groupe.
-- Bouton "Sélectionner le groupe" pour charger tous ses techniciens d'un coup.
-- La recherche de disponibilités peut maintenant travailler :
-  * sur les techniciens cochés,
-  * OU directement sur un groupe entier.
-- La création d'une réunion depuis une disponibilité de groupe sélectionne
-  automatiquement tous les techniciens actifs du groupe comme participants.
-- Les groupes restent configurables depuis l'administration.
+NOUVEAU STYLE
+- Palette plus douce et moderne.
+- Entête en dégradé violet/bleu.
+- Hiérarchie typographique renforcée.
+- Navigation harmonisée avec pictogrammes.
+- Cartes plus aérées et cohérentes.
+- Boutons unifiés.
+- Champs et formulaires plus propres.
+- Effets d'ombre discrets.
+- Groupes présentés sous forme de tuiles modernes.
+- Planning équipe plus lisible et plus premium.
+- Rendez-vous sous forme de cartes plus élégantes.
+- Recherche de disponibilités visuellement mieux séparée.
+- Dialogues modernisés.
+- Administration et réglages harmonisés.
+- Mobile : navigation basse plus proche d'une vraie application.
+
+AUCUN CHANGEMENT DE LOGIQUE
+La v0.6.0 reprend toutes les fonctions de la v0.5.3 :
+- groupes,
+- planning détaillé,
+- recherche de disponibilités,
+- journées entières,
+- participants,
+- exports,
+- gestion utilisateurs,
+- réglages,
+- types de rendez-vous.
 
 INSTALLATION
 Aucun SQL.
