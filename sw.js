@@ -1,5 +1,5 @@
-const CACHE='calendrier-mdl-v113';
-const ASSETS=['./','./index.html','./styles.css?v=113','./app.js?v=113','./config.js','./manifest.webmanifest?v=113','./icons/icon-192.png','./icons/icon-512.png'];
+const CACHE='calendrier-mdl-v120';
+const ASSETS=['./','./index.html','./styles.css?v=120','./app.js?v=120','./config.js','./manifest.webmanifest?v=120','./icons/icon-192.png','./icons/icon-512.png'];
 
 self.addEventListener('install',event=>{
   self.skipWaiting();

@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=113';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=120';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -32,14 +32,14 @@ let deferredInstallPrompt=null;
 let teamAbsenceOnly=false;
 let notificationTimer=null;
 let schedulingSettings = null;
-const APP_VERSION='1.1.3';
+const APP_VERSION='1.2.0';
 const PUSH_VAPID_PUBLIC_KEY='BOM2G56uDxJtG30Jjv_3n4w3JxWCRKZe0v8gA9aN7qSAJjpRRi-7LNxST2pb74bsc4rEhiIXEMZpw08tQIlImkE';
 let lastSuccessfulSync=null;
 let diagnosticsText='';
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 1.1.3 · ${message}`;
+  if (box) box.textContent = `Version 1.2.0 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -1878,7 +1878,7 @@ function installPwa(){
   if('serviceWorker' in navigator){
     window.addEventListener('load',async()=>{
       try{
-        const reg=await navigator.serviceWorker.register('./sw.js?v=113');
+        const reg=await navigator.serviceWorker.register('./sw.js?v=120');
         await reg.update();
         if(reg.waiting)showToast('Une mise à jour est prête. Recharge l’application.',5000);
       }catch(err){console.warn('Service Worker',err)}
@@ -2006,7 +2006,7 @@ async function forceRepairPushSubscription(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window))throw new Error('Push non pris en charge');
   if(!('Notification' in window)||Notification.permission!=='granted')throw new Error('Autorisation Android non accordée');
 
-  const reg=await navigator.serviceWorker.register('./sw.js?v=113',{updateViaCache:'none'});
+  const reg=await navigator.serviceWorker.register('./sw.js?v=120',{updateViaCache:'none'});
   try{await reg.update()}catch{}
   const ready=await navigator.serviceWorker.ready;
 
