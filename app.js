@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=112';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=113';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -32,14 +32,14 @@ let deferredInstallPrompt=null;
 let teamAbsenceOnly=false;
 let notificationTimer=null;
 let schedulingSettings = null;
-const APP_VERSION='1.1.2';
+const APP_VERSION='1.1.3';
 const PUSH_VAPID_PUBLIC_KEY='BOM2G56uDxJtG30Jjv_3n4w3JxWCRKZe0v8gA9aN7qSAJjpRRi-7LNxST2pb74bsc4rEhiIXEMZpw08tQIlImkE';
 let lastSuccessfulSync=null;
 let diagnosticsText='';
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 1.1.2 · ${message}`;
+  if (box) box.textContent = `Version 1.1.3 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -1878,7 +1878,7 @@ function installPwa(){
   if('serviceWorker' in navigator){
     window.addEventListener('load',async()=>{
       try{
-        const reg=await navigator.serviceWorker.register('./sw.js?v=112');
+        const reg=await navigator.serviceWorker.register('./sw.js?v=113');
         await reg.update();
         if(reg.waiting)showToast('Une mise à jour est prête. Recharge l’application.',5000);
       }catch(err){console.warn('Service Worker',err)}
@@ -2006,7 +2006,7 @@ async function forceRepairPushSubscription(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window))throw new Error('Push non pris en charge');
   if(!('Notification' in window)||Notification.permission!=='granted')throw new Error('Autorisation Android non accordée');
 
-  const reg=await navigator.serviceWorker.register('./sw.js?v=112',{updateViaCache:'none'});
+  const reg=await navigator.serviceWorker.register('./sw.js?v=113',{updateViaCache:'none'});
   try{await reg.update()}catch{}
   const ready=await navigator.serviceWorker.ready;
 
@@ -2211,6 +2211,28 @@ async function saveNotificationSettings(){
     : 'Notifications désactivées et mémorisées.';
   startNotificationLoop();
 }
+
+async function testClosedAppNotification(){
+  try{
+    if(!currentProfile?.id)throw new Error('Utilisateur non connecté');
+    if(!('Notification' in window))throw new Error('Notifications non prises en charge');
+    if(Notification.permission!=='granted'){
+      const permission=await ensureNotificationPermission();
+      if(permission!=='granted')throw new Error('Autorisation Android non accordée');
+    }
+    await syncPushSubscription(true);
+    const scheduledAt=new Date(Date.now()+2*60*1000).toISOString();
+    const {data,error}=await supabase.from('push_test_queue').insert({user_id:currentProfile.id,scheduled_at:scheduledAt}).select('id,scheduled_at').single();
+    if(error)throw error;
+    localStorage.setItem('mdl_last_closed_push_test',JSON.stringify(data));
+    showToast('Test programmé. Ferme COMPLÈTEMENT l’application maintenant. Notification serveur dans environ 2 minutes.',10000);
+    $('notificationSettingsStatus').textContent='🧪 Test application fermée programmé : ferme l’application maintenant. Envoi serveur dans ~2 min.';
+  }catch(err){
+    console.error('Test Push fermé',err);
+    showToast(`Test fermé impossible : ${err.message}`,9000);
+  }
+}
+
 async function testNotification(){
   if(!('Notification' in window)){showToast('Notifications non prises en charge.');return}
   const permission=await ensureNotificationPermission();
@@ -2412,3 +2434,29 @@ $('copyDiagnosticsBtn').addEventListener('click',copyDiagnostics);
 window.addEventListener('unhandledrejection',e=>{console.error('Erreur asynchrone',e.reason);showToast(`Erreur : ${e.reason?.message||e.reason||'opération impossible'}`,6000);});
 window.addEventListener('error',e=>{console.error('Erreur JavaScript',e.error||e.message);});
 bootstrap();
+
+
+document.addEventListener('click',event=>{
+  const btn=event.target.closest('[data-action="test-closed-push"]');
+  if(btn){event.preventDefault();testClosedAppNotification();}
+});
+
+function ensureClosedPushTestButton(){
+  const existing=document.querySelector('[data-action="test-closed-push"]');
+  if(existing)return;
+  const testBtn=[...document.querySelectorAll('button')].find(b=>/Tester une notification/i.test(b.textContent||''));
+  if(!testBtn)return;
+  const b=document.createElement('button');
+  b.type='button';
+  b.className=testBtn.className;
+  b.dataset.action='test-closed-push';
+  b.textContent='Tester application fermée (2 min)';
+  b.style.marginLeft='8px';
+  testBtn.insertAdjacentElement('afterend',b);
+}
+const _oldLoadNotificationSettings=loadNotificationSettings;
+loadNotificationSettings=async function(){
+  const result=await _oldLoadNotificationSettings();
+  ensureClosedPushTestButton();
+  return result;
+};
