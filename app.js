@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=111';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=112';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -32,14 +32,14 @@ let deferredInstallPrompt=null;
 let teamAbsenceOnly=false;
 let notificationTimer=null;
 let schedulingSettings = null;
-const APP_VERSION='1.1.1';
+const APP_VERSION='1.1.2';
 const PUSH_VAPID_PUBLIC_KEY='BOM2G56uDxJtG30Jjv_3n4w3JxWCRKZe0v8gA9aN7qSAJjpRRi-7LNxST2pb74bsc4rEhiIXEMZpw08tQIlImkE';
 let lastSuccessfulSync=null;
 let diagnosticsText='';
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 1.1.1 · ${message}`;
+  if (box) box.textContent = `Version 1.1.2 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -1878,7 +1878,7 @@ function installPwa(){
   if('serviceWorker' in navigator){
     window.addEventListener('load',async()=>{
       try{
-        const reg=await navigator.serviceWorker.register('./sw.js?v=111');
+        const reg=await navigator.serviceWorker.register('./sw.js?v=112');
         await reg.update();
         if(reg.waiting)showToast('Une mise à jour est prête. Recharge l’application.',5000);
       }catch(err){console.warn('Service Worker',err)}
@@ -2000,6 +2000,51 @@ function urlBase64ToUint8Array(base64String){
   const raw=atob(base64);
   return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
 }
+
+async function forceRepairPushSubscription(){
+  if(!currentProfile?.id)throw new Error('Utilisateur non connecté');
+  if(!('serviceWorker' in navigator)||!('PushManager' in window))throw new Error('Push non pris en charge');
+  if(!('Notification' in window)||Notification.permission!=='granted')throw new Error('Autorisation Android non accordée');
+
+  const reg=await navigator.serviceWorker.register('./sw.js?v=112',{updateViaCache:'none'});
+  try{await reg.update()}catch{}
+  const ready=await navigator.serviceWorker.ready;
+
+  // Supprime l'ancien abonnement navigateur et toutes les anciennes lignes du compte.
+  const old=await ready.pushManager.getSubscription();
+  if(old){try{await old.unsubscribe()}catch{}}
+  const {error:de}=await supabase.from('push_subscriptions').delete().eq('user_id',currentProfile.id);
+  if(de)console.warn('Nettoyage anciens abonnements Push',de);
+
+  const sub=await ready.pushManager.subscribe({
+    userVisibleOnly:true,
+    applicationServerKey:urlBase64ToUint8Array(PUSH_VAPID_PUBLIC_KEY)
+  });
+  const j=sub.toJSON();
+  const {error:se}=await supabase.from('push_subscriptions').insert({
+    user_id:currentProfile.id,
+    endpoint:sub.endpoint,
+    p256dh:j.keys?.p256dh,
+    auth:j.keys?.auth,
+    user_agent:navigator.userAgent,
+    is_active:true,
+    updated_at:new Date().toISOString()
+  });
+  if(se)throw se;
+
+  const {error:pe}=await supabase.from('push_preferences').upsert({
+    user_id:currentProfile.id,
+    enabled:true,
+    reminder_minutes:Number($('notificationReminderMinutes').value||30),
+    notify_changes:$('notifyMeetingChanges').checked,
+    updated_at:new Date().toISOString()
+  },{onConflict:'user_id'});
+  if(pe)throw pe;
+
+  localStorage.setItem('mdl_push_repair_v112','ok');
+  return true;
+}
+
 async function syncPushSubscription(enabled){
   if(!currentProfile?.id)throw new Error('Utilisateur non connecté');
   if(!('serviceWorker' in navigator)||!('PushManager' in window))throw new Error('Push non pris en charge');
@@ -2067,7 +2112,8 @@ async function handleNotificationToggle(){
       saved_at:new Date().toISOString()
     });
     try{
-      await syncPushSubscription(true);
+      if(localStorage.getItem('mdl_push_repair_v112')!=='ok') await forceRepairPushSubscription();
+      else await syncPushSubscription(true);
       box.checked=true;
       $('notificationSettingsStatus').textContent='Push Android activé · rappels reçus même application fermée.';
     }catch(err){
@@ -2117,6 +2163,16 @@ async function loadNotificationSettings(){
     saved_at:p.saved_at||null
   };
   saveNotificationPrefs(normalized);
+
+  if(normalized.enabled && permission==='granted' && localStorage.getItem('mdl_push_repair_v112')!=='ok') {
+    try{
+      $('notificationSettingsStatus').textContent='Réparation de l’abonnement Push Android…';
+      await forceRepairPushSubscription();
+    }catch(err){
+      console.error('Réparation Push Android',err);
+      localStorage.removeItem('mdl_push_repair_v112');
+    }
+  }
 
   $('notificationsEnabled').checked=normalized.enabled;
   $('notificationReminderMinutes').value=String(normalized.minutes);
