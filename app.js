@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=041';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=042';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -26,7 +26,7 @@ let pendingParticipantIds = [];
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.4.1 · ${message}`;
+  if (box) box.textContent = `Version 0.4.2 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -537,13 +537,75 @@ function atMinutes(day,mins){
 function overlaps(aStart,aEnd,bStart,bEnd){ return aStart < bEnd && aEnd > bStart; }
 
 async function getUserBusySlots(userId,start,end){
-  const {data,error}=await supabase.rpc('get_busy_slots',{
-    target_user_id:userId,
-    range_start:start.toISOString(),
-    range_end:end.toISOString()
+  // On lit les événements avec all_day, car get_busy_slots() ne transporte
+  // que starts_at / ends_at et ne permet donc pas de savoir qu'une journée
+  // doit être bloquée entièrement.
+  const ownedRes=await supabase
+    .from('events')
+    .select('id,starts_at,ends_at,all_day,status')
+    .eq('owner_id',userId)
+    .neq('status','cancelled')
+    .lt('starts_at',end.toISOString())
+    .gt('ends_at',start.toISOString());
+
+  if(ownedRes.error)throw ownedRes.error;
+
+  const partRes=await supabase
+    .from('event_participants')
+    .select('event_id,participation_status')
+    .eq('user_id',userId)
+    .neq('participation_status','declined');
+
+  if(partRes.error)throw partRes.error;
+
+  const eventIds=[...new Set((partRes.data||[]).map(x=>x.event_id))];
+  let participantEvents=[];
+
+  if(eventIds.length){
+    const evRes=await supabase
+      .from('events')
+      .select('id,starts_at,ends_at,all_day,status')
+      .in('id',eventIds)
+      .neq('status','cancelled')
+      .lt('starts_at',end.toISOString())
+      .gt('ends_at',start.toISOString());
+
+    if(evRes.error)throw evRes.error;
+    participantEvents=evRes.data||[];
+  }
+
+  const byId=new Map();
+  [...(ownedRes.data||[]),...participantEvents].forEach(ev=>byId.set(ev.id,ev));
+
+  return [...byId.values()].map(ev=>{
+    const rawStart=new Date(ev.starts_at);
+    const rawEnd=new Date(ev.ends_at);
+
+    if(ev.all_day){
+      // Une "journée entière" bloque réellement toute la ou les journées
+      // couvertes, même si les heures internes du rendez-vous sont 08:15-09:15.
+      const busyStart=new Date(rawStart);
+      busyStart.setHours(0,0,0,0);
+
+      const busyEnd=new Date(rawEnd);
+      busyEnd.setHours(0,0,0,0);
+
+      // Si début et fin sont le même jour, on bloque jusqu'au lendemain.
+      if(busyEnd <= busyStart){
+        busyEnd.setDate(busyStart.getDate()+1);
+      } else if(
+        rawEnd.getHours()!==0 || rawEnd.getMinutes()!==0 ||
+        rawEnd.getSeconds()!==0 || rawEnd.getMilliseconds()!==0
+      ){
+        // Si la fin porte une heure quelconque, la journée de fin est aussi bloquée.
+        busyEnd.setDate(busyEnd.getDate()+1);
+      }
+
+      return {start:busyStart,end:busyEnd,all_day:true};
+    }
+
+    return {start:rawStart,end:rawEnd,all_day:false};
   });
-  if(error)throw error;
-  return (data||[]).map(x=>({start:new Date(x.starts_at),end:new Date(x.ends_at)}));
 }
 
 async function computeCommonSlots(ids,start,end,duration,step,maxResults=20){
