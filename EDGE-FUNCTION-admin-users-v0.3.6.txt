@@ -1,0 +1,181 @@
+import { createClient } from 'npm:@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
+function getNamedKey(envName: string): string | null {
+  const raw = Deno.env.get(envName)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed?.default || Object.values(parsed || {})[0] as string || null
+  } catch {
+    return raw
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method !== 'POST') return json({ error: 'Méthode non autorisée' }, 405)
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const publishableKey = getNamedKey('SUPABASE_PUBLISHABLE_KEYS')
+    const secretKey = getNamedKey('SUPABASE_SECRET_KEYS')
+
+    if (!supabaseUrl || !publishableKey || !secretKey) {
+      return json({ error: 'Configuration Supabase serveur incomplète' })
+    }
+
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) return json({ error: 'Session utilisateur absente' }, 401)
+
+    const jwt = authHeader.replace(/^Bearer\s+/i, '')
+
+    // Client utilisateur : toutes les opérations BDD sensibles passent par
+    // des RPC SECURITY DEFINER qui contrôlent auth.uid() et le rôle.
+    const userClient = createClient(supabaseUrl, publishableKey, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    })
+
+    const { data: authData, error: authError } = await userClient.auth.getUser(jwt)
+    if (authError || !authData?.user) {
+      return json({ error: `Session invalide : ${authError?.message || 'utilisateur introuvable'}` }, 401)
+    }
+
+    const callerId = authData.user.id
+    const callerEmail = authData.user.email || ''
+
+    const { data: canManage, error: canManageError } = await userClient.rpc('can_manage_users')
+    if (canManageError) return json({ error: `Contrôle des droits impossible : ${canManageError.message}` })
+    if (canManage !== true) {
+      const { data: role } = await userClient.rpc('current_app_role')
+      return json({ error: `Accès refusé pour ${callerEmail}. Rôle détecté : ${role || 'aucun'}` })
+    }
+
+    // Client secret : UNIQUEMENT Supabase Auth admin.
+    // Aucune lecture/écriture directe des tables avec ce client.
+    const authAdmin = createClient(supabaseUrl, secretKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    })
+
+    const body = await req.json()
+    const action = String(body.action || '')
+
+    if (action === 'create') {
+      const role = String(body.role || 'technicien')
+      const email = String(body.email || '').trim().toLowerCase()
+      const password = String(body.password || '')
+      const firstName = String(body.first_name || '').trim()
+      const lastName = String(body.last_name || '').trim()
+      const displayName = String(body.display_name || '').trim() || `${firstName} ${lastName}`.trim()
+      const groupIds = Array.isArray(body.group_ids) ? body.group_ids : []
+      const primaryGroupId = body.primary_group_id || null
+
+      if (!email) return json({ error: 'Adresse e-mail obligatoire' })
+      if (password.length < 8) return json({ error: 'Mot de passe temporaire trop court' })
+
+      // Crée d'abord le compte Auth.
+      const { data: created, error: createError } = await authAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          first_name: firstName,
+          last_name: lastName,
+          display_name: displayName,
+        },
+      })
+
+      if (createError || !created.user) {
+        return json({ error: createError?.message || 'Création Auth impossible' })
+      }
+
+      const uid = created.user.id
+
+      // Le trigger auth.users -> profiles doit avoir créé le profil.
+      // On laisse une courte marge avant l'appel RPC.
+      await new Promise(r => setTimeout(r, 250))
+
+      const { error: profileError } = await userClient.rpc('manager_create_user_profile', {
+        target_user_id: uid,
+        new_first_name: firstName,
+        new_last_name: lastName,
+        new_display_name: displayName,
+        new_role: role,
+        new_is_active: body.is_active !== false,
+        new_has_global_scope: !!body.has_global_scope,
+        new_group_ids: groupIds,
+        new_primary_group_id: primaryGroupId,
+      })
+
+      if (profileError) {
+        await authAdmin.auth.admin.deleteUser(uid)
+        return json({ error: `Création annulée : ${profileError.message}` })
+      }
+
+      return json({ ok: true, user_id: uid })
+    }
+
+    if (action === 'update') {
+      const { error } = await userClient.rpc('manager_update_user_profile', {
+        target_user_id: String(body.user_id || ''),
+        new_first_name: String(body.first_name || '').trim(),
+        new_last_name: String(body.last_name || '').trim(),
+        new_display_name: String(body.display_name || '').trim(),
+        new_role: String(body.role || 'technicien'),
+        new_is_active: body.is_active !== false,
+        new_has_global_scope: !!body.has_global_scope,
+        new_group_ids: Array.isArray(body.group_ids) ? body.group_ids : [],
+        new_primary_group_id: body.primary_group_id || null,
+      })
+      if (error) return json({ error: error.message })
+      return json({ ok: true })
+    }
+
+    if (action === 'set_active') {
+      const { error } = await userClient.rpc('manager_set_user_active', {
+        target_user_id: String(body.user_id || ''),
+        new_is_active: !!body.is_active,
+      })
+      if (error) return json({ error: error.message })
+      return json({ ok: true })
+    }
+
+    if (action === 'delete') {
+      const targetId = String(body.user_id || '')
+
+      // Nettoyage BDD sécurisé avec le JWT de l'administrateur.
+      const { error: dataError } = await userClient.rpc('manager_delete_user_data', {
+        target_user_id: targetId,
+      })
+      if (dataError) return json({ error: dataError.message })
+
+      // Puis suppression Auth avec la clé secrète.
+      const { error: authDeleteError } = await authAdmin.auth.admin.deleteUser(targetId)
+      if (authDeleteError) {
+        return json({
+          error: `Données supprimées mais suppression Auth impossible : ${authDeleteError.message}`
+        })
+      }
+
+      return json({ ok: true })
+    }
+
+    return json({ error: 'Action inconnue' })
+  } catch (e) {
+    console.error(e)
+    return json({ error: e instanceof Error ? e.message : String(e) })
+  }
+})
