@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=060" />
+  <link rel="stylesheet" href="styles.css?v=070" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -23,257 +23,193 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.6.0 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.7.0 · prête.</div>
     </section>
   </main>
 
-  <div id="appView" class="app-shell" hidden>
-    <header class="topbar safe-top">
-      <div>
-        <p class="eyebrow">Calendrier Équipe MDL</p>
-        <div class="welcome-block"><span class="product-kicker">Calendrier Équipe MDL</span><h1 id="welcomeTitle">Bonjour</h1><span id="roleChip" class="role-chip"></span></div>
-      </div>
-      <button id="logoutBtn" class="ghost">Déconnexion</button>
-    </header>
-
-    <nav class="tabs" aria-label="Navigation principale">
-      <button class="tab active" data-view="agenda"><span class="tab-icon">◫</span><span>Mon agenda</span></button>
-      <button class="tab" data-view="team" id="teamTab"><span class="tab-icon">◉</span><span>Équipe</span></button>
-      <button class="tab" data-view="settings" id="settingsTab"><span class="tab-icon">⚙</span><span>Mes réglages</span></button>
-      <button class="tab" data-view="admin" id="adminTab" hidden><span class="tab-icon">⌘</span><span>Administration</span></button>
-    </nav>
-
-    <section id="agendaPanel" class="panel safe-bottom">
-      <div class="calendar-toolbar">
+  
+<div id="appView" hidden>
+  <div class="workspace-shell">
+    <aside class="sidebar safe-top safe-bottom">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo">▣</div>
         <div>
-          <p class="eyebrow">Mon calendrier</p>
-          <h2 id="calendarTitle">Agenda</h2>
-        </div>
-        <div class="toolbar-actions">
-          <button id="prevBtn" class="icon-btn" aria-label="Précédent">‹</button>
-          <button id="todayBtn" class="ghost">Aujourd’hui</button>
-          <button id="nextBtn" class="icon-btn" aria-label="Suivant">›</button>
-          <button id="newEventBtn" class="primary">+ Rendez-vous</button>
+          <strong>Calendrier Équipe MDL</strong>
+          <span>Planifiez, collaborez, restez organisés</span>
         </div>
       </div>
 
-      <div class="view-switch" role="group" aria-label="Choix de la vue">
-        <button class="view-btn" data-cal-view="month">Mois</button>
-        <button class="view-btn active" data-cal-view="week">Semaine</button>
-        <button class="view-btn" data-cal-view="agenda">Agenda</button>
+      <nav class="sidebar-nav">
+        <button class="side-link active" data-view="dashboard"><span>⌂</span>Tableau de bord</button>
+        <button class="side-link" data-view="agenda"><span>▣</span>Mon agenda</button>
+        <button class="side-link" id="quickCreateEventBtn"><span>＋</span>Créer un rendez-vous</button>
+        <button class="side-link" data-view="team"><span>⌕</span>Recherche de disponibilités</button>
+
+        <div class="side-section-title">ÉQUIPE</div>
+        <button class="side-link" data-view="team"><span>▦</span>Planning équipe</button>
+        <button class="side-link" data-view="groups"><span>◉</span>Groupes</button>
+        <button class="side-link" data-view="technicians"><span>👥</span>Techniciens</button>
+
+        <div class="side-section-title" id="adminSideTitle">ADMINISTRATION</div>
+        <button class="side-link admin-only" data-view="admin" id="adminUsersLink"><span>♙</span>Utilisateurs</button>
+        <button class="side-link admin-only" data-view="admin"><span>◌</span>Groupes</button>
+        <button class="side-link admin-only" data-view="admin"><span>◫</span>Types de rendez-vous</button>
+        <button class="side-link admin-only" data-view="admin"><span>⚙</span>Horaires & paramètres</button>
+
+        <div class="side-section-title">EXPORTS</div>
+        <button class="side-link" id="sideExportXlsx"><span>⇩</span>Export équipe (Excel)</button>
+        <button class="side-link" id="sideExportCsv"><span>⇩</span>Export équipe (CSV)</button>
+        <button class="side-link" id="sideExportIcs"><span>⇩</span>Export équipe (ICS)</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="skyline-mark"></div>
+        <div class="mdl-mark">MÉTROPOLE <strong>GRAND LYON</strong></div>
       </div>
+    </aside>
 
-      <div class="agenda-tools card">
-        <input id="agendaSearch" type="search" placeholder="Rechercher titre, lieu, description…" />
-        <select id="agendaTypeFilter"><option value="">Tous les types</option></select>
-        <select id="agendaStatusFilter">
-          <option value="">Tous les statuts</option>
-          <option value="confirmed">Confirmés</option>
-          <option value="tentative">Provisoires</option>
-          <option value="cancelled">Annulés</option>
-        </select>
-        <div class="export-menu">
-          <button id="exportAgendaXlsxBtn" class="ghost">Excel</button>
-          <button id="exportAgendaCsvBtn" class="ghost">CSV</button>
-          <button id="exportAgendaIcsBtn" class="ghost">ICS</button>
+    <div class="main-shell">
+      <header class="topbar safe-top">
+        <div class="mobile-brand">
+          <div class="sidebar-logo">▣</div>
+          <strong>Calendrier Équipe MDL</strong>
         </div>
-      </div>
-
-      <div id="calendarHost" class="calendar-host"></div>
-    </section>
-
-    <section id="teamPanel" class="panel safe-bottom" hidden>
-      <div class="panel-head team-head">
-        <div>
-          <p class="eyebrow">Planification</p>
-          <h2>Planning équipe</h2>
-          <p class="muted">Visualiser plusieurs techniciens, trouver un créneau commun et créer une réunion en quelques clics.</p>
+        <div class="top-search">
+          <span>⌕</span>
+          <input id="globalSearch" type="search" placeholder="Rechercher (Ctrl + K)" />
         </div>
-        <div class="toolbar-actions">
-          <button id="teamPrevBtn" class="icon-btn" aria-label="Période précédente">‹</button>
-          <button id="teamTodayBtn" class="ghost">Aujourd’hui</button>
-          <button id="teamNextBtn" class="icon-btn" aria-label="Période suivante">›</button>
-          <button id="refreshTeamBtn" class="ghost">Actualiser</button>
-        </div>
-      </div>
-
-      <div class="team-control-card card">
-        <div class="team-filter-row">
-          <label>Groupe
-            <select id="teamGroupFilter"><option value="">Tous les groupes</option></select>
-          </label>
-          <label>Mode groupe
-            <select id="teamGroupMode">
-              <option value="filter" selected>Filtrer la liste</option>
-              <option value="select_all">Sélectionner tout le groupe</option>
-            </select>
-          </label>
-          <label>Date
-            <input id="teamDate" type="date" />
-          </label>
-          <label>Affichage
-            <select id="teamRange">
-              <option value="1">1 jour</option>
-              <option value="3">3 jours</option>
-              <option value="5" selected>5 jours</option>
-              <option value="7">7 jours</option>
-            </select>
-          </label>
-          <label>Détail
-            <select id="teamDetailMode">
-              <option value="detailed" selected>Détaillé</option>
-              <option value="compact">Compact</option>
-            </select>
-          </label>
-          <div class="team-quick-actions">
-            <button id="selectAllTeamBtn" class="small-btn" type="button">Tout sélectionner</button>
-            <button id="clearTeamBtn" class="ghost" type="button">Effacer</button>
-          </div>
-        </div>
-        <div id="teamUsers" class="check-list team-user-grid"></div>
-      </div>
-
-      <div id="groupOverview" class="group-overview"></div>
-      <div class="team-workspace">
-        <article class="card team-planning-card">
-          <div class="card-head">
+        <div class="top-actions">
+          <button class="top-icon" id="themeDecorBtn" type="button" aria-label="Apparence">☼</button>
+          <button class="top-icon" type="button" aria-label="Aide">?</button>
+          <div class="user-card">
+            <div class="avatar-fallback" id="headerAvatar">P</div>
             <div>
-              <h3>Calendriers sélectionnés</h3>
-              <p id="teamPlanningCaption" class="muted">Sélectionne un ou plusieurs techniciens.</p>
+              <strong id="welcomeTitle">Bonjour</strong>
+              <span id="roleChip">Utilisateur</span>
             </div>
-            <div class="export-menu"><button id="exportTeamBtn" class="ghost">Excel</button><button id="exportTeamCsvBtn" class="ghost">CSV</button><button id="exportTeamIcsBtn" class="ghost">ICS</button></div>
           </div>
-          <div id="teamPlanningStats" class="team-planning-stats" hidden></div>
-          <div id="teamSchedule" class="team-schedule">
-            <div class="empty">Sélectionne des techniciens pour afficher leurs plannings.</div>
-          </div>
-        </article>
-
-        <article class="card common-slot-card">
-          <div class="card-head"><h3>Trouver un créneau commun</h3></div>
-          <form id="slotSearchForm" class="stack compact-stack">
-            <label>Rechercher pour
-              <select id="slotGroupFilter"><option value="">Techniciens sélectionnés</option></select>
-            </label>
-            <div class="two-cols">
-              <label>Du<input id="slotStartDate" type="date" required /></label>
-              <label>Au<input id="slotEndDate" type="date" required /></label>
-            </div>
-            <div class="two-cols">
-              <label>Durée
-                <select id="slotDuration">
-                  <option value="30">30 min</option>
-                  <option value="45">45 min</option>
-                  <option value="60" selected>1 h</option>
-                  <option value="90">1 h 30</option>
-                  <option value="120">2 h</option>
-                </select>
-              </label>
-              <label>Pas
-                <select id="slotStep">
-                  <option value="15" selected>15 min</option>
-                  <option value="30">30 min</option>
-                  <option value="60">1 h</option>
-                </select>
-              </label>
-            </div>
-            <button type="submit" class="primary">Rechercher les disponibilités</button>
-          </form>
-          <div id="slotResults" class="slot-results"></div>
-        </article>
-      </div>
-    </section>
-
-    <section id="settingsPanel" class="panel safe-bottom" hidden>
-      <div class="panel-head">
-        <div>
-          <p class="eyebrow">Préférences</p>
-          <h2>Mes réglages</h2>
-          <p class="muted">Contrôle ce que les autres utilisateurs standards peuvent voir de ton calendrier.</p>
+          <button id="logoutBtn" class="top-logout">Déconnexion</button>
         </div>
-      </div>
-      <div class="settings-grid">
-        <article class="card">
-          <div class="card-head"><h3>Partage de mon calendrier</h3></div>
-          <label class="toggle-row">
-            <input id="shareCalendarToggle" type="checkbox" />
-            <span><strong>Partager mon calendrier</strong><small>Les responsables et planificateurs autorisés conservent leur accès indépendamment de ce réglage.</small></span>
-          </label>
-          <label>Mode de partage
-            <select id="shareModeSelect">
-              <option value="details">Afficher les détails</option>
-              <option value="busy_only">Afficher uniquement Occupé / Libre</option>
-            </select>
-          </label>
-          <button id="saveSharingBtn" class="primary">Enregistrer mes préférences</button>
-          <p id="sharingStatus" class="muted"></p>
-        </article>
-        <article class="card">
-          <div class="card-head"><h3>Mon compte</h3></div>
-          <div id="myAccountSummary" class="account-summary"></div>
-        </article>
-      </div>
-    </section>
+      </header>
 
-    <section id="adminPanel" class="panel safe-bottom" hidden>
-      <div class="panel-head">
-        <div><p class="eyebrow">Administration</p><h2>Utilisateurs & groupes</h2></div>
-        <button id="refreshAdminBtn" class="ghost">Actualiser</button>
-      </div>
-      <div class="admin-grid">
-        <article class="card">
-          <div class="card-head"><h3>Groupes</h3><button id="addGroupBtn" class="small-btn">+ Ajouter</button></div>
-          <div id="groupsList" class="simple-list"></div>
-        </article>
-        <article class="card">
-          <div class="card-head">
-            <div><h3>Utilisateurs</h3><p class="muted admin-note">Création, désactivation et archivage avant suppression.</p></div>
-            <button id="addUserBtn" class="primary">+ Nouvel utilisateur</button>
+      <main class="dashboard-main safe-bottom">
+        <section id="dashboardPanel" class="main-view">
+          <div class="metric-grid">
+            <article class="metric-card metric-purple">
+              <div class="metric-icon">👥</div>
+              <div><strong id="metricTechnicians">0</strong><span>Techniciens</span><small id="metricGroups">0 groupe</small></div>
+            </article>
+            <article class="metric-card metric-green">
+              <div class="metric-icon">▣</div>
+              <div><strong id="metricMeetings">0</strong><span>Rendez-vous</span><small>Cette semaine</small></div>
+            </article>
+            <article class="metric-card metric-orange">
+              <div class="metric-icon">◷</div>
+              <div><strong id="metricHours">0 h</strong><span>Planifiées</span><small>Cette semaine</small></div>
+            </article>
+            <article class="metric-card metric-blue">
+              <div class="metric-icon">✓</div>
+              <div><strong id="metricOccupancy">0 %</strong><span>Taux d’occupation</span><small>Moyenne équipe</small></div>
+            </article>
+            <article class="metric-card metric-violet">
+              <div class="metric-icon">▤</div>
+              <div><strong id="metricAvailability">0</strong><span>Disponibilités</span><small>Aujourd’hui</small></div>
+            </article>
           </div>
-          <div class="user-filters">
-            <input id="userSearch" type="search" placeholder="Rechercher un utilisateur…" />
-            <select id="userRoleFilter">
-              <option value="">Tous les rôles</option>
-              <option value="technicien">Techniciens</option>
-              <option value="planificateur">Planificateurs</option>
-              <option value="responsable">Responsables</option>
-              <option value="administrateur">Administrateurs</option>
-            </select>
-            <select id="userStatusFilter">
-              <option value="">Tous les statuts</option>
-              <option value="active">Actifs</option>
-              <option value="inactive">Désactivés</option>
-            </select>
+
+          <div class="dashboard-grid">
+            <section class="dashboard-center">
+              <article class="premium-card planning-hero">
+                <div class="premium-head">
+                  <div>
+                    <h2>Planning équipe</h2>
+                    <p id="dashboardPlanningCaption">Vue synthétique de l’équipe</p>
+                  </div>
+                  <div class="hero-actions">
+                    <button class="seg active" id="dashWeekBtn">Semaine</button>
+                    <button class="seg" id="dashDayBtn">Jour</button>
+                    <button class="seg" id="dashMonthBtn">Mois</button>
+                    <button class="iconish" id="dashPrevBtn">‹</button>
+                    <button class="date-pill" id="dashDateLabel">Période</button>
+                    <button class="iconish" id="dashNextBtn">›</button>
+                    <button class="seg active" id="dashDetailedBtn">Détaillé</button>
+                    <button class="seg" id="dashCompactBtn">Compact</button>
+                  </div>
+                </div>
+                <div id="dashboardTeamSchedule" class="dashboard-team-schedule">
+                  <div class="empty">Chargement du planning…</div>
+                </div>
+
+                <div class="common-slots-strip">
+                  <div class="common-slots-title">
+                    <div class="common-check">✓</div>
+                    <div><strong>Créneaux communs disponibles</strong><span id="dashboardSlotCaption">Sélectionnez des participants</span></div>
+                    <button id="dashboardCreateMeetingBtn" class="small-primary">Créer une réunion</button>
+                  </div>
+                  <div id="dashboardSlotResults" class="common-slot-cards">
+                    <div class="slot-mini muted-box">Aucun calcul effectué</div>
+                  </div>
+                </div>
+              </article>
+            </section>
+
+            <aside class="dashboard-right">
+              <article class="premium-card">
+                <div class="premium-head compact"><h3>Groupes</h3><button id="viewAllGroupsBtn" class="text-btn">Voir tout</button></div>
+                <div id="dashboardGroups" class="dashboard-group-list"></div>
+              </article>
+
+              <article class="premium-card">
+                <div class="premium-head compact"><h3>Recherche de disponibilités</h3><span class="help-dot">?</span></div>
+                <div id="dashboardParticipants" class="participant-chip-row"></div>
+                <div class="mini-form-grid">
+                  <label>Période
+                    <div class="date-range-inline">
+                      <input id="dashSlotStart" type="date" />
+                      <span>→</span>
+                      <input id="dashSlotEnd" type="date" />
+                    </div>
+                  </label>
+                  <div class="two-mini">
+                    <label>Durée<select id="dashSlotDuration"><option value="30">30 min</option><option value="60" selected>1 h</option><option value="90">1 h 30</option><option value="120">2 h</option></select></label>
+                    <label>Pas<select id="dashSlotStep"><option value="15" selected>15 min</option><option value="30">30 min</option><option value="60">1 h</option></select></label>
+                  </div>
+                  <button id="dashSearchAvailabilityBtn" class="primary wide">Rechercher les disponibilités</button>
+                </div>
+              </article>
+
+              <article class="premium-card">
+                <div class="premium-head compact"><h3>Prochaines réunions</h3><button id="viewAgendaBtn" class="text-btn">Voir tout</button></div>
+                <div id="dashboardUpcoming" class="upcoming-list"></div>
+              </article>
+            </aside>
           </div>
-          <div id="usersList" class="simple-list"></div>
-        </article>
-        <article class="card">
-          <div class="card-head"><div><h3>Types de rendez-vous</h3><p class="muted admin-note">Catégories et couleurs du calendrier.</p></div><button id="addEventTypeBtn" class="small-btn">+ Ajouter</button></div>
-          <div id="eventTypesAdminList" class="simple-list"></div>
-        </article>
-        <article class="card">
-          <div class="card-head"><div><h3>Horaires de planification</h3><p class="muted admin-note">Valeurs par défaut utilisées par la recherche de disponibilités.</p></div></div>
-          <form id="schedulingForm" class="stack compact-stack">
-            <div class="two-cols">
-              <label>Début de journée<input id="schedDayStart" type="time" /></label>
-              <label>Fin de journée<input id="schedDayEnd" type="time" /></label>
-            </div>
-            <label class="toggle-row"><input id="schedExcludeLunch" type="checkbox" /><span><strong>Exclure la pause déjeuner</strong></span></label>
-            <div class="two-cols">
-              <label>Début pause<input id="schedLunchStart" type="time" /></label>
-              <label>Fin pause<input id="schedLunchEnd" type="time" /></label>
-            </div>
-            <label>Pas de recherche par défaut
-              <select id="schedStep"><option value="15">15 min</option><option value="30">30 min</option><option value="60">60 min</option></select>
-            </label>
-            <button class="primary" type="submit">Enregistrer les horaires</button>
-          </form>
-        </article>
-      </div>
-    </section>
+        </section>
+
+        <section id="agendaPanel" class="main-view" hidden></section>
+        <section id="teamPanel" class="main-view" hidden></section>
+        <section id="groupsPanel" class="main-view" hidden>
+          <div class="page-title"><div><span class="eyebrow">Équipe</span><h2>Groupes</h2></div></div>
+          <div id="groupsPageGrid" class="group-page-grid"></div>
+        </section>
+        <section id="techniciansPanel" class="main-view" hidden>
+          <div class="page-title"><div><span class="eyebrow">Équipe</span><h2>Techniciens</h2></div></div>
+          <div id="techniciansPageGrid" class="tech-page-grid"></div>
+        </section>
+        <section id="settingsPanel" class="main-view" hidden></section>
+        <section id="adminPanel" class="main-view" hidden></section>
+      </main>
+
+      <nav class="mobile-nav safe-bottom">
+        <button class="mobile-link active" data-view="dashboard"><span>⌂</span><small>Accueil</small></button>
+        <button class="mobile-link" data-view="agenda"><span>▣</span><small>Agenda</small></button>
+        <button class="mobile-link" data-view="team"><span>▦</span><small>Équipe</small></button>
+        <button class="mobile-link" data-view="settings"><span>⚙</span><small>Réglages</small></button>
+      </nav>
+    </div>
   </div>
-
-  <dialog id="eventDialog" class="wide">
+</div>
+<dialog id="eventDialog" class="wide">
     <form id="eventForm" class="stack dialog-card">
       <div class="dialog-title-row">
         <div><p class="eyebrow">Calendrier</p><h2 id="eventDialogTitle">Nouveau rendez-vous</h2></div>
@@ -402,7 +338,7 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=060"></script>
+  <script type="module" src="app.js?v=070"></script>
 
   <dialog id="eventTypeDialog">
     <form id="eventTypeForm" class="stack dialog-card">

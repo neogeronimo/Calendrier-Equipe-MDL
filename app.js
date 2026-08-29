@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=060';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=070';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -23,11 +23,15 @@ let archiveReadyForUserId = null;
 let teamEvents = [];
 let teamSelectedIds = new Set();
 let pendingParticipantIds = [];
+let dashboardRangeDays=5;
+let dashboardCursor=new Date();
+let dashboardSelectedIds=new Set();
+let dashboardSlotData=[];
 let schedulingSettings = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.6.0 · ${message}`;
+  if (box) box.textContent = `Version 0.7.0 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -117,6 +121,7 @@ async function loadReferenceData() {
 
 function showAppShell() {
   $('loginView').hidden = true; $('appView').hidden = false;
+  setTimeout(()=>{updateHeaderIdentity();initDashboardBindings();setMainView('dashboard');},0);
   const first = currentProfile?.first_name?.trim();
   $('welcomeTitle').textContent = first ? `Bonjour ${first}` : `Bonjour ${profileName(currentProfile)}`;
   $('adminTab').hidden = !roleCanManageUsers();
@@ -1342,6 +1347,183 @@ async function confirmDeleteUser() {
   deleteTarget=null; archiveReadyForUserId=null;
   await loadReferenceData();
   await loadAdmin();
+}
+
+
+function initials(name='U'){
+  return String(name).trim().split(/\s+/).slice(0,2).map(x=>x[0]?.toUpperCase()||'').join('')||'U';
+}
+function weekRangeFrom(date,days=5){
+  const start=startOfWeek(date);
+  return {start,end:addDays(start,days),days};
+}
+function thisWeekEvents(){
+  const {start,end}=weekRangeFrom(new Date(),7);
+  return (events||[]).filter(ev=>new Date(ev.starts_at)<end && new Date(ev.ends_at)>start && ev.status!=='cancelled');
+}
+function updateDashboardMetrics(){
+  const techs=profiles.filter(p=>p.role==='technicien'&&p.is_active!==false);
+  const week=thisWeekEvents();
+  const hours=week.filter(e=>!e.all_day).reduce((s,e)=>s+Math.max(0,(new Date(e.ends_at)-new Date(e.starts_at))/3600000),0);
+  const totalCapacity=Math.max(1,techs.length*5*8);
+  $('metricTechnicians').textContent=techs.length;
+  $('metricGroups').textContent=`${groups.length} groupe${groups.length>1?'s':''}`;
+  $('metricMeetings').textContent=week.length;
+  $('metricHours').textContent=`${Math.round(hours)} h`;
+  $('metricOccupancy').textContent=`${Math.min(100,Math.round(hours/totalCapacity*100))} %`;
+  $('metricAvailability').textContent=Math.max(0,techs.length-Math.min(techs.length,week.filter(e=>sameDay(new Date(e.starts_at),new Date())).length));
+}
+function dashboardDefaultSelection(){
+  const techs=profiles.filter(p=>p.role==='technicien'&&p.is_active!==false);
+  if(!dashboardSelectedIds.size) techs.slice(0,5).forEach(p=>dashboardSelectedIds.add(p.id));
+}
+function renderDashboardGroups(){
+  const host=$('dashboardGroups'); if(!host)return;
+  host.innerHTML=groups.filter(g=>g.is_active!==false).slice(0,4).map(g=>{
+    const members=techniciansInGroup(g.id);
+    return `<div class="dash-group-card">
+      <div class="dash-group-top">
+        <div class="dash-group-icon">👥</div>
+        <div><strong>${escapeHtml(g.name)}</strong><small>${members.length} technicien${members.length>1?'s':''}</small></div>
+      </div>
+      <div class="dash-group-actions">
+        <button data-dash-group-view="${g.id}">Afficher</button>
+        <button class="select" data-dash-group-select="${g.id}">Sélectionner</button>
+      </div>
+    </div>`;
+  }).join('')||'<div class="empty">Aucun groupe.</div>';
+  host.querySelectorAll('[data-dash-group-view]').forEach(b=>b.addEventListener('click',()=>{
+    dashboardSelectedIds=new Set(techniciansInGroup(b.dataset.dashGroupView).map(p=>p.id));
+    renderDashboardParticipants(); renderDashboardPlanning();
+  }));
+  host.querySelectorAll('[data-dash-group-select]').forEach(b=>b.addEventListener('click',()=>{
+    dashboardSelectedIds=new Set(techniciansInGroup(b.dataset.dashGroupSelect).map(p=>p.id));
+    renderDashboardParticipants(); renderDashboardPlanning();
+  }));
+}
+function dashboardEventsForUser(userId,start,end){
+  return teamEvents.filter(ev=>{
+    const applies=ev.owner_id===userId || (ev.participant_user_ids||[]).includes(userId);
+    return applies && new Date(ev.starts_at)<end && new Date(ev.ends_at)>start && ev.status!=='cancelled';
+  });
+}
+async function refreshDashboardPlanning(){
+  dashboardDefaultSelection();
+  const ids=[...dashboardSelectedIds];
+  const {start,end}=weekRangeFrom(dashboardCursor,dashboardRangeDays);
+  try{
+    teamEvents=await loadTeamEvents(ids,start,end);
+  }catch(e){
+    $('dashboardTeamSchedule').innerHTML=`<div class="error">${escapeHtml(e.message||String(e))}</div>`;
+    return;
+  }
+  renderDashboardPlanning();
+  renderDashboardUpcoming();
+  updateDashboardMetrics();
+}
+function renderDashboardPlanning(){
+  const ids=[...dashboardSelectedIds];
+  const users=ids.map(id=>profiles.find(p=>p.id===id)).filter(Boolean);
+  const {start,end,days}=weekRangeFrom(dashboardCursor,dashboardRangeDays);
+  $('dashDateLabel').textContent=`${fmtDate(start,{day:'2-digit',month:'short'})} – ${fmtDate(addDays(start,days-1),{day:'2-digit',month:'short',year:'numeric'})}`;
+  $('dashboardPlanningCaption').textContent=`${users.length} technicien${users.length>1?'s':''} sélectionné${users.length>1?'s':''}`;
+  let html=`<div class="dashboard-team-table" style="--dash-days:${days}"><div class="dash-head"><div>Technicien</div>`;
+  for(let d=0;d<days;d++){const day=addDays(start,d);html+=`<div>${escapeHtml(fmtDate(day,{weekday:'short',day:'2-digit',month:'short'}))}</div>`}
+  html+='</div>';
+  for(const u of users){
+    html+=`<div class="dash-row"><div class="dash-person"><div class="dash-avatar">${escapeHtml(initials(profileName(u)))}</div><div><strong>${escapeHtml(profileName(u))}</strong><small>${escapeHtml(roleLabel(u.role))}</small></div></div>`;
+    for(let d=0;d<days;d++){
+      const day=addDays(start,d),dayEnd=addDays(day,1);
+      const list=dashboardEventsForUser(u.id,day,dayEnd).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+      html+='<div class="dash-cell">';
+      if(!list.length)html+='<span class="dash-free">Libre</span>';
+      list.slice(0,3).forEach(ev=>{
+        const type=eventTypes.find(t=>t.id===ev.event_type_id);
+        const time=ev.all_day?'Journée entière':`${fmtTime(new Date(ev.starts_at))} – ${fmtTime(new Date(ev.ends_at))}`;
+        html+=`<button class="dash-event" data-dash-event="${ev.id}" style="border-left-color:${escapeHtml(eventColor(ev))}"><span>${escapeHtml(time)}</span><strong>${escapeHtml(ev.title)}</strong>${ev.location?`<span>${escapeHtml(ev.location)}</span>`:''}${type?`<span class="event-badge">${escapeHtml(type.name)}</span>`:''}</button>`;
+      });
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+  html+='</div>';
+  $('dashboardTeamSchedule').innerHTML=html;
+  $('dashboardTeamSchedule').querySelectorAll('[data-dash-event]').forEach(b=>b.addEventListener('click',()=>openEventById(b.dataset.dashEvent)));
+}
+function renderDashboardParticipants(){
+  const host=$('dashboardParticipants'); if(!host)return;
+  const ids=[...dashboardSelectedIds];
+  host.innerHTML=ids.map(id=>profiles.find(p=>p.id===id)).filter(Boolean).map(p=>`<span class="participant-chip">${escapeHtml(profileName(p))}</span>`).join('')||'<span class="muted">Aucun participant</span>';
+  $('dashboardSlotCaption').textContent=`${ids.length} participant${ids.length>1?'s':''}`;
+}
+async function dashboardSearchSlots(){
+  const ids=[...dashboardSelectedIds];
+  if(!ids.length){showToast('Sélectionne au moins un technicien.');return;}
+  const start=new Date(`${$('dashSlotStart').value}T00:00:00`);
+  const end=new Date(`${$('dashSlotEnd').value}T23:59:59`);
+  const duration=Number($('dashSlotDuration').value),step=Number($('dashSlotStep').value);
+  $('dashboardSlotResults').innerHTML='<div class="slot-mini muted-box">Recherche…</div>';
+  try{
+    dashboardSlotData=await computeCommonSlots(ids,start,end,duration,step,6);
+    if(!dashboardSlotData.length){$('dashboardSlotResults').innerHTML='<div class="slot-mini muted-box">Aucun créneau commun.</div>';return;}
+    $('dashboardSlotResults').innerHTML=dashboardSlotData.map((s,i)=>{const a=new Date(s.slot_start),b=new Date(s.slot_end);return `<button class="slot-mini" data-dash-slot="${i}"><span>${escapeHtml(fmtDate(a,{weekday:'short',day:'2-digit',month:'short'}))}</span><strong>${fmtTime(a)} – ${fmtTime(b)}</strong></button>`}).join('');
+    $('dashboardSlotResults').querySelectorAll('[data-dash-slot]').forEach(b=>b.addEventListener('click',()=>{const s=dashboardSlotData[Number(b.dataset.dashSlot)];openNewEvent(new Date(s.slot_start),currentProfile.id,ids);$('eventEnd').value=toLocalInput(new Date(s.slot_end));$('eventTitle').value='Réunion';}));
+  }catch(e){$('dashboardSlotResults').innerHTML=`<div class="slot-mini muted-box">${escapeHtml(e.message||String(e))}</div>`}
+}
+function renderDashboardUpcoming(){
+  const host=$('dashboardUpcoming'); if(!host)return;
+  const now=new Date();
+  const list=[...events].filter(e=>new Date(e.ends_at)>=now&&e.status!=='cancelled').sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at)).slice(0,5);
+  host.innerHTML=list.map(e=>`<button class="upcoming-item" data-upcoming="${e.id}"><small>${escapeHtml(fmtDate(new Date(e.starts_at),{weekday:'long',day:'2-digit',month:'short'}))} · ${e.all_day?'Journée entière':fmtTime(new Date(e.starts_at))}</small><strong>${escapeHtml(e.title)}</strong>${e.location?`<small>${escapeHtml(e.location)}</small>`:''}</button>`).join('')||'<div class="empty">Aucune réunion à venir.</div>';
+  host.querySelectorAll('[data-upcoming]').forEach(b=>b.addEventListener('click',()=>openEventById(b.dataset.upcoming)));
+}
+function renderGroupsPage(){
+  const h=$('groupsPageGrid'); if(!h)return;
+  h.innerHTML=groups.map(g=>`<article class="page-card"><h3>${escapeHtml(g.name)}</h3><p>${escapeHtml(g.description||'')}</p><strong>${techniciansInGroup(g.id).length} technicien(s)</strong></article>`).join('');
+}
+function renderTechniciansPage(){
+  const h=$('techniciansPageGrid'); if(!h)return;
+  h.innerHTML=profiles.filter(p=>p.role==='technicien').map(p=>`<article class="page-card"><h3>${escapeHtml(profileName(p))}</h3><p>${escapeHtml(groupNamesForUser(p.id).join(', ')||'Sans groupe')}</p><strong>${p.is_active===false?'Inactif':'Actif'}</strong></article>`).join('');
+}
+function updateHeaderIdentity(){
+  if(!$('headerAvatar'))return;
+  $('headerAvatar').textContent=initials(profileName(currentProfile));
+  $('welcomeTitle').textContent=profileName(currentProfile);
+  $('roleChip').textContent=roleLabel(currentProfile.role);
+  document.querySelectorAll('.admin-only').forEach(el=>el.hidden=!roleCanManageUsers());
+  if($('adminSideTitle')) $('adminSideTitle').hidden=!roleCanManageUsers();
+}
+function setMainView(view){
+  currentMainView=view;
+  const ids=['dashboard','agenda','team','groups','technicians','settings','admin'];
+  ids.forEach(v=>{const el=$(v+'Panel');if(el)el.hidden=v!==view});
+  document.querySelectorAll('.side-link[data-view],.mobile-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
+  if(view==='dashboard'){refreshDashboardPlanning();renderDashboardGroups();renderDashboardParticipants();}
+  if(view==='agenda'){loadCalendarEvents().then(renderCalendar);}
+  if(view==='team'){renderTeamUsers();refreshTeamSchedule();}
+  if(view==='groups')renderGroupsPage();
+  if(view==='technicians')renderTechniciansPage();
+  if(view==='settings')loadMySettings();
+  if(view==='admin')loadAdmin();
+}
+function initDashboardBindings(){
+  const today=new Date();$('dashSlotStart').value=toDateInput(today);$('dashSlotEnd').value=toDateInput(addDays(today,7));
+  document.querySelectorAll('.side-link[data-view],.mobile-link[data-view]').forEach(b=>b.addEventListener('click',()=>setMainView(b.dataset.view)));
+  $('quickCreateEventBtn').addEventListener('click',()=>openNewEvent(new Date()));
+  $('sideExportXlsx').addEventListener('click',exportTeamPlanningExcel);
+  $('sideExportCsv').addEventListener('click',exportTeamCsv);
+  $('sideExportIcs').addEventListener('click',exportTeamIcs);
+  $('dashPrevBtn').addEventListener('click',()=>{dashboardCursor=addDays(dashboardCursor,-dashboardRangeDays);refreshDashboardPlanning()});
+  $('dashNextBtn').addEventListener('click',()=>{dashboardCursor=addDays(dashboardCursor,dashboardRangeDays);refreshDashboardPlanning()});
+  $('dashDayBtn').addEventListener('click',()=>{dashboardRangeDays=1;document.querySelectorAll('#dashWeekBtn,#dashDayBtn,#dashMonthBtn').forEach(x=>x.classList.remove('active'));$('dashDayBtn').classList.add('active');refreshDashboardPlanning()});
+  $('dashWeekBtn').addEventListener('click',()=>{dashboardRangeDays=5;document.querySelectorAll('#dashWeekBtn,#dashDayBtn,#dashMonthBtn').forEach(x=>x.classList.remove('active'));$('dashWeekBtn').classList.add('active');refreshDashboardPlanning()});
+  $('dashMonthBtn').addEventListener('click',()=>{dashboardRangeDays=7;document.querySelectorAll('#dashWeekBtn,#dashDayBtn,#dashMonthBtn').forEach(x=>x.classList.remove('active'));$('dashMonthBtn').classList.add('active');refreshDashboardPlanning()});
+  $('dashSearchAvailabilityBtn').addEventListener('click',dashboardSearchSlots);
+  $('dashboardCreateMeetingBtn').addEventListener('click',()=>{const ids=[...dashboardSelectedIds];openNewEvent(new Date(),currentProfile.id,ids)});
+  $('viewAllGroupsBtn').addEventListener('click',()=>setMainView('groups'));
+  $('viewAgendaBtn').addEventListener('click',()=>setMainView('agenda'));
+  $('globalSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){setMainView('agenda');$('agendaSearch').value=e.target.value;renderCalendar()}});
+  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('globalSearch').focus()}});
 }
 
 async function bootstrap() {

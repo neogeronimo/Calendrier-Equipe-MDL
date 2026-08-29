@@ -1,41 +1,31 @@
-CALENDRIER ÉQUIPE MDL v0.6.0 — DESIGN REFRESH
+CALENDRIER ÉQUIPE MDL v0.7.0 — DASHBOARD
 
-OBJECTIF
-Refonte visuelle globale sans casser la logique fonctionnelle validée.
+Cette version change profondément l'interface pour se rapprocher de la maquette validée.
 
-NOUVEAU STYLE
-- Palette plus douce et moderne.
-- Entête en dégradé violet/bleu.
-- Hiérarchie typographique renforcée.
-- Navigation harmonisée avec pictogrammes.
-- Cartes plus aérées et cohérentes.
-- Boutons unifiés.
-- Champs et formulaires plus propres.
-- Effets d'ombre discrets.
-- Groupes présentés sous forme de tuiles modernes.
-- Planning équipe plus lisible et plus premium.
-- Rendez-vous sous forme de cartes plus élégantes.
-- Recherche de disponibilités visuellement mieux séparée.
-- Dialogues modernisés.
-- Administration et réglages harmonisés.
-- Mobile : navigation basse plus proche d'une vraie application.
+NOUVELLE STRUCTURE PC
+- Barre latérale permanente.
+- Bandeau supérieur premium avec recherche et utilisateur connecté.
+- Tableau de bord avec 5 indicateurs.
+- Planning équipe central façon outil SaaS.
+- Cartes de groupes dans la colonne droite.
+- Recherche de disponibilités intégrée dans le dashboard.
+- Prochaines réunions.
+- Créneaux communs sous le planning.
+- Accès séparé Groupes / Techniciens / Administration / Exports.
 
-AUCUN CHANGEMENT DE LOGIQUE
-La v0.6.0 reprend toutes les fonctions de la v0.5.3 :
-- groupes,
-- planning détaillé,
-- recherche de disponibilités,
-- journées entières,
-- participants,
-- exports,
-- gestion utilisateurs,
-- réglages,
-- types de rendez-vous.
+RESPONSIVE MOBILE
+- Sidebar supprimée.
+- Navigation basse.
+- En-tête compact.
+- Cartes et planning adaptés à la largeur disponible.
+- Safe areas conservées.
 
-INSTALLATION
+IMPORTANT
+La logique Supabase existante est conservée.
 Aucun SQL.
 Aucune Edge Function.
 
+INSTALLATION
 Sur GitHub remplacer :
 - index.html
 - app.js
