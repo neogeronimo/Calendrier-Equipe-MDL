@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=042';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=050';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -23,10 +23,11 @@ let archiveReadyForUserId = null;
 let teamEvents = [];
 let teamSelectedIds = new Set();
 let pendingParticipantIds = [];
+let schedulingSettings = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.4.2 · ${message}`;
+  if (box) box.textContent = `Version 0.5.0 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -158,6 +159,17 @@ function updateCalendarTitle() {
     $('calendarTitle').textContent = `${fmtDate(s,{day:'2-digit',month:'short'})} – ${fmtDate(e,{day:'2-digit',month:'short',year:'numeric'})}`;
   } else $('calendarTitle').textContent = `À partir du ${fmtDate(cursorDate,{day:'2-digit',month:'long',year:'numeric'})}`;
 }
+function filteredCalendarEvents() {
+  const q=($('agendaSearch')?.value||'').trim().toLowerCase();
+  const type=$('agendaTypeFilter')?.value||'';
+  const status=$('agendaStatusFilter')?.value||'';
+  return events.filter(ev=>{
+    if(type && ev.event_type_id!==type)return false;
+    if(status && ev.status!==status)return false;
+    if(q && !`${ev.title||''} ${ev.location||''} ${ev.description||''}`.toLowerCase().includes(q))return false;
+    return true;
+  });
+}
 function renderCalendar() {
   updateCalendarTitle();
   document.querySelectorAll('.view-btn').forEach(b=>b.classList.toggle('active',b.dataset.calView===calendarView));
@@ -170,7 +182,7 @@ function renderMonth() {
   let html='<div class="calendar-card"><div class="month-grid">'+names.map(n=>`<div class="month-head">${n}</div>`).join('');
   for(let i=0;i<42;i++){
     const day=addDays(gridStart,i); const dayEnd=addDays(day,1);
-    const dayEvents=events.filter(ev=>new Date(ev.starts_at)<dayEnd && new Date(ev.ends_at)>day).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+    const dayEvents=filteredCalendarEvents().filter(ev=>new Date(ev.starts_at)<dayEnd && new Date(ev.ends_at)>day).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
     html+=`<div class="month-day ${day.getMonth()!==first.getMonth()?'other-month':''} ${sameDay(day,today)?'today':''}" data-day="${toDateInput(day)}">
       <div class="day-number">${day.getDate()}</div>`;
     dayEvents.slice(0,3).forEach(ev=>{
@@ -185,30 +197,60 @@ function renderMonth() {
 }
 
 function renderWeek() {
-  const host=$('calendarHost'); const s=startOfWeek(cursorDate); const today=startOfDay(new Date()); const startHour=8, endHour=19, totalHours=endHour-startHour;
-  let html='<div class="week-wrap"><div class="week-grid"><div class="week-corner"></div>';
-  for(let i=0;i<7;i++){const d=addDays(s,i); html+=`<div class="week-day-head ${sameDay(d,today)?'today':''}"><strong>${fmtDate(d,{weekday:'short'})}</strong><span>${fmtDate(d,{day:'2-digit',month:'short'})}</span></div>`;}
-  html+='<div class="time-col">'; for(let h=startHour;h<endHour;h++) html+=`<div class="time-label">${pad(h)}:00</div>`; html+='</div>';
+  const host=$('calendarHost');
+  const s=startOfWeek(cursorDate);
+  const today=startOfDay(new Date());
+  const startHour=8,endHour=19,totalHours=endHour-startHour;
+  const filtered=filteredCalendarEvents();
+
+  let allDay='<div class="week-wrap"><div class="all-day-strip"><div class="all-day-label">Journée</div>';
   for(let i=0;i<7;i++){
-    const d=addDays(s,i), dEnd=addDays(d,1); const dayEvents=events.filter(ev=>new Date(ev.starts_at)<dEnd && new Date(ev.ends_at)>d && !ev.all_day);
+    const d=addDays(s,i),dEnd=addDays(d,1);
+    const list=filtered.filter(ev=>ev.all_day && new Date(ev.starts_at)<dEnd && new Date(ev.ends_at)>d);
+    allDay+=`<div class="all-day-cell">`;
+    list.forEach(ev=>allDay+=`<button class="all-day-event" data-event-id="${ev.id}" style="border-left-color:${escapeHtml(eventColor(ev))}">${escapeHtml(ev.title)}</button>`);
+    allDay+='</div>';
+  }
+  allDay+='</div>';
+
+  let html='<div class="week-grid"><div class="week-corner"></div>';
+  for(let i=0;i<7;i++){const d=addDays(s,i);html+=`<div class="week-day-head ${sameDay(d,today)?'today':''}"><strong>${fmtDate(d,{weekday:'short'})}</strong><span>${fmtDate(d,{day:'2-digit',month:'short'})}</span></div>`;}
+  html+='<div class="time-col">';
+  for(let h=startHour;h<endHour;h++)html+=`<div class="time-label">${pad(h)}:00</div>`;
+  html+='</div>';
+
+  for(let i=0;i<7;i++){
+    const d=addDays(s,i),dEnd=addDays(d,1);
+    const dayEvents=filtered.filter(ev=>new Date(ev.starts_at)<dEnd && new Date(ev.ends_at)>d && !ev.all_day);
     html+=`<div class="day-col" data-day="${toDateInput(d)}" data-start-hour="${startHour}">`;
     dayEvents.forEach(ev=>{
-      const a=new Date(ev.starts_at), b=new Date(ev.ends_at); const clipStart=new Date(Math.max(a,d)); const clipEnd=new Date(Math.min(b,dEnd));
-      const startMin=Math.max(0,(clipStart.getHours()-startHour)*60+clipStart.getMinutes()); const endMin=Math.min(totalHours*60,(clipEnd.getHours()-startHour)*60+clipEnd.getMinutes());
-      if(endMin<=0||startMin>=totalHours*60) return;
-      const top=(Math.max(0,startMin)/60)*54; const height=Math.max(28,((Math.min(totalHours*60,endMin)-Math.max(0,startMin))/60)*54);
+      const a=new Date(ev.starts_at),b=new Date(ev.ends_at);
+      const clipStart=new Date(Math.max(a,d)),clipEnd=new Date(Math.min(b,dEnd));
+      const startMin=Math.max(0,(clipStart.getHours()-startHour)*60+clipStart.getMinutes());
+      const endMin=Math.min(totalHours*60,(clipEnd.getHours()-startHour)*60+clipEnd.getMinutes());
+      if(endMin<=0||startMin>=totalHours*60)return;
+      const top=(Math.max(0,startMin)/60)*54;
+      const height=Math.max(28,((Math.min(totalHours*60,endMin)-Math.max(0,startMin))/60)*54);
       html+=`<button class="week-event ${ev.status==='cancelled'?'cancelled':''}" data-event-id="${ev.id}" style="top:${top}px;height:${height}px;border-left-color:${escapeHtml(eventColor(ev))}"><strong>${escapeHtml(ev.title)}</strong><span>${fmtTime(a)}–${fmtTime(b)}</span></button>`;
-    }); html+='</div>';
+    });
+    html+='</div>';
   }
-  html+='</div></div>'; host.innerHTML=html;
+  html+='</div></div>';
+  host.innerHTML=allDay+html;
+
   host.querySelectorAll('[data-event-id]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();openEventById(b.dataset.eventId);}));
   host.querySelectorAll('.day-col').forEach(col=>col.addEventListener('dblclick',e=>{
-    if(e.target!==col) return; const rect=col.getBoundingClientRect(); const y=e.clientY-rect.top; const mins=Math.max(0,Math.min(totalHours*60,Math.round((y/54*60)/15)*15)); const d=new Date(`${col.dataset.day}T00:00`); d.setMinutes(startHour*60+mins); openNewEvent(d);
+    if(e.target!==col)return;
+    const rect=col.getBoundingClientRect(),y=e.clientY-rect.top;
+    const mins=Math.max(0,Math.min(totalHours*60,Math.round((y/54*60)/15)*15));
+    const d=new Date(`${col.dataset.day}T00:00`);
+    d.setMinutes(startHour*60+mins);
+    openNewEvent(d);
   }));
 }
 
 function renderAgenda() {
-  const host=$('calendarHost'); const sorted=[...events].sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+  const host=$('calendarHost'); const sorted=[...filteredCalendarEvents()].sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
   if(!sorted.length){host.innerHTML='<div class="empty">Aucun rendez-vous sur cette période.</div>';return;}
   const byDay=new Map(); sorted.forEach(ev=>{const k=toDateInput(new Date(ev.starts_at)); if(!byDay.has(k))byDay.set(k,[]);byDay.get(k).push(ev);});
   let html='<div class="agenda-list">';
@@ -225,6 +267,7 @@ function populateOwnerSelect() {
 }
 function populateEventTypes() {
   $('eventType').innerHTML='<option value="">Sans catégorie</option>'+eventTypes.map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+  if($('agendaTypeFilter')) $('agendaTypeFilter').innerHTML='<option value="">Tous les types</option>'+eventTypes.map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
 }
 
 function renderEventParticipants(selectedIds=[]) {
@@ -372,6 +415,68 @@ async function deleteEvent() {
   const {error}=await supabase.from('events').delete().eq('id',id); if(error){$('eventFormError').textContent=error.message;$('eventFormError').hidden=false;return;}
   $('eventDialog').close();showToast('Rendez-vous supprimé.');await loadCalendarEvents();renderCalendar();
 }
+
+
+function csvEscape(v){
+  const s=String(v??'');
+  return /[;"\n]/.test(s)?`"${s.replaceAll('"','""')}"`:s;
+}
+function downloadText(filename,text,mime='text/plain;charset=utf-8'){
+  const blob=new Blob(['\ufeff'+text],{type:mime});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function eventRows(list,ownerLabel=''){
+  return list.map(ev=>({
+    'Calendrier':ownerLabel || profileName(profiles.find(p=>p.id===ev.owner_id)) || '',
+    'Début':ev.all_day?toDateInput(new Date(ev.starts_at)):new Date(ev.starts_at).toLocaleString('fr-FR'),
+    'Fin':ev.all_day?toDateInput(new Date(ev.ends_at)):new Date(ev.ends_at).toLocaleString('fr-FR'),
+    'Journée entière':ev.all_day?'Oui':'Non',
+    'Titre':ev.title||'',
+    'Type':eventTypes.find(t=>t.id===ev.event_type_id)?.name||'',
+    'Lieu':ev.location||'',
+    'Description':ev.description||'',
+    'Statut':ev.status||''
+  }));
+}
+function exportRowsCsv(rows,filename){
+  if(!rows.length){showToast('Aucune donnée à exporter.');return;}
+  const headers=Object.keys(rows[0]);
+  const text=[headers.map(csvEscape).join(';'),...rows.map(r=>headers.map(h=>csvEscape(r[h])).join(';'))].join('\n');
+  downloadText(filename,text,'text/csv;charset=utf-8');
+}
+function icsEscape(v){return String(v??'').replaceAll('\\','\\\\').replaceAll('\n','\\n').replaceAll(',','\\,').replaceAll(';','\\;');}
+function icsDate(d){return new Date(d).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z');}
+function eventsToIcs(list,name='Calendrier Équipe MDL'){
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Calendrier Equipe MDL//FR',`X-WR-CALNAME:${icsEscape(name)}`];
+  for(const ev of list){
+    lines.push('BEGIN:VEVENT',`UID:${ev.id}@calendrier-equipe-mdl`,`DTSTAMP:${icsDate(new Date())}`);
+    if(ev.all_day){
+      const s=toDateInput(new Date(ev.starts_at)).replaceAll('-','');
+      let end=new Date(ev.ends_at);
+      if(s===toDateInput(end).replaceAll('-','')) end=addDays(new Date(ev.starts_at),1);
+      lines.push(`DTSTART;VALUE=DATE:${s}`,`DTEND;VALUE=DATE:${toDateInput(end).replaceAll('-','')}`);
+    }else{
+      lines.push(`DTSTART:${icsDate(ev.starts_at)}`,`DTEND:${icsDate(ev.ends_at)}`);
+    }
+    lines.push(`SUMMARY:${icsEscape(ev.title)}`);
+    if(ev.location)lines.push(`LOCATION:${icsEscape(ev.location)}`);
+    if(ev.description)lines.push(`DESCRIPTION:${icsEscape(ev.description)}`);
+    lines.push('END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+function exportAgendaXlsx(){
+  const rows=eventRows(filteredCalendarEvents(),profileName(currentProfile));
+  const wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows.length?rows:[{'Information':'Aucun rendez-vous'}]);
+  ws['!cols']=[{wch:25},{wch:20},{wch:20},{wch:14},{wch:32},{wch:20},{wch:25},{wch:45},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws,'Agenda');
+  XLSX.writeFile(wb,`Agenda-${toDateInput(cursorDate)}.xlsx`,{compression:true});
+}
+function exportAgendaCsv(){exportRowsCsv(eventRows(filteredCalendarEvents(),profileName(currentProfile)),`Agenda-${toDateInput(cursorDate)}.csv`);}
+function exportAgendaIcs(){downloadText(`Agenda-${toDateInput(cursorDate)}.ics`,eventsToIcs(filteredCalendarEvents(),`Agenda ${profileName(currentProfile)}`),'text/calendar;charset=utf-8');}
 
 function populateTeamFilters() {
   $('teamGroupFilter').innerHTML='<option value="">Tous les groupes</option>'+groups.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
@@ -708,6 +813,17 @@ async function searchSlots(e) {
   }
 }
 
+
+function teamExportEvents(){
+  const ids=selectedTeamIds(),seen=new Map();
+  teamEvents.forEach(ev=>{
+    if(ids.includes(ev.owner_id)||(ev.participant_user_ids||[]).some(id=>ids.includes(id)))seen.set(ev.id,ev);
+  });
+  return [...seen.values()].sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+}
+function exportTeamCsv(){exportRowsCsv(eventRows(teamExportEvents()),`Planning-Equipe-${$('teamDate').value}.csv`);}
+function exportTeamIcs(){downloadText(`Planning-Equipe-${$('teamDate').value}.ics`,eventsToIcs(teamExportEvents(),'Planning Équipe MDL'),'text/calendar;charset=utf-8');}
+
 function exportTeamPlanningExcel() {
   const ids=selectedTeamIds();
   if(!ids.length){showToast('Sélectionne au moins un technicien.');return;}
@@ -745,6 +861,82 @@ function exportTeamPlanningExcel() {
   showToast('Export Excel généré.');
 }
 
+
+async function loadMySettings(){
+  $('shareCalendarToggle').checked=!!currentProfile.share_calendar;
+  $('shareModeSelect').value=currentProfile.calendar_share_mode||'details';
+  $('shareModeSelect').disabled=!currentProfile.share_calendar;
+  $('myAccountSummary').innerHTML=`
+    <div class="account-line"><span>Nom</span><strong>${escapeHtml(profileName(currentProfile))}</strong></div>
+    <div class="account-line"><span>Rôle</span><strong>${escapeHtml(roleLabel(currentProfile.role))}</strong></div>
+    <div class="account-line"><span>Accès global</span><strong>${currentProfile.has_global_scope?'Oui':'Non'}</strong></div>
+    <div class="account-line"><span>Groupes</span><strong>${escapeHtml(groupNamesForUser(currentProfile.id).join(', ')||'Aucun')}</strong></div>`;
+}
+async function saveMySharing(){
+  const share=$('shareCalendarToggle').checked,mode=$('shareModeSelect').value;
+  $('sharingStatus').textContent='Enregistrement…';
+  const {error}=await supabase.rpc('update_my_calendar_sharing',{new_share_calendar:share,new_share_mode:mode});
+  if(error){$('sharingStatus').textContent=error.message;return;}
+  currentProfile.share_calendar=share;currentProfile.calendar_share_mode=mode;
+  $('sharingStatus').textContent='Préférences enregistrées.';
+  showToast('Préférences enregistrées.');
+}
+function renderEventTypesAdmin(){
+  if(!$('eventTypesAdminList'))return;
+  $('eventTypesAdminList').innerHTML=eventTypes.length?eventTypes.map(t=>`
+    <div class="simple-row type-admin-row">
+      <div><span class="type-color-dot" style="background:${escapeHtml(t.color||'#5b4fd6')}"></span><strong>${escapeHtml(t.name)}</strong><div class="muted tiny">${escapeHtml(t.description||'')}</div></div>
+      <button class="ghost" data-edit-type="${t.id}">Modifier</button>
+    </div>`).join(''):'<div class="empty">Aucun type.</div>';
+  document.querySelectorAll('[data-edit-type]').forEach(b=>b.addEventListener('click',()=>openEventTypeDialog(b.dataset.editType)));
+}
+function openEventTypeDialog(id=null){
+  const t=id?eventTypes.find(x=>x.id===id):null;
+  $('eventTypeAdminId').value=t?.id||'';
+  $('eventTypeDialogTitle').textContent=t?'Modifier le type':'Nouveau type';
+  $('eventTypeAdminName').value=t?.name||'';
+  $('eventTypeAdminDescription').value=t?.description||'';
+  $('eventTypeAdminColor').value=t?.color||'#5b4fd6';
+  $('eventTypeAdminActive').checked=t?.is_active!==false;
+  $('deleteEventTypeBtn').hidden=!t;
+  $('eventTypeAdminError').hidden=true;
+  $('eventTypeDialog').showModal();
+}
+async function saveEventTypeAdmin(e){
+  e.preventDefault();
+  const id=$('eventTypeAdminId').value;
+  const payload={name:$('eventTypeAdminName').value.trim(),description:$('eventTypeAdminDescription').value.trim()||null,color:$('eventTypeAdminColor').value,is_active:$('eventTypeAdminActive').checked};
+  let res=id?await supabase.from('event_types').update(payload).eq('id',id):await supabase.from('event_types').insert(payload);
+  if(res.error){$('eventTypeAdminError').textContent=res.error.message;$('eventTypeAdminError').hidden=false;return;}
+  $('eventTypeDialog').close();await loadReferenceData();renderEventTypesAdmin();showToast('Type enregistré.');
+}
+async function deleteEventTypeAdmin(){
+  const id=$('eventTypeAdminId').value;if(!id)return;
+  if(!confirm('Supprimer ce type de rendez-vous ? Les rendez-vous existants conserveront leurs données mais perdront cette catégorie.'))return;
+  const {error}=await supabase.from('event_types').delete().eq('id',id);
+  if(error){$('eventTypeAdminError').textContent=error.message;$('eventTypeAdminError').hidden=false;return;}
+  $('eventTypeDialog').close();await loadReferenceData();renderEventTypesAdmin();showToast('Type supprimé.');
+}
+async function loadSchedulingSettings(){
+  const {data,error}=await supabase.from('scheduling_settings').select('*').eq('id',1).maybeSingle();
+  if(error)return;
+  schedulingSettings=data;
+  if(!data)return;
+  $('schedDayStart').value=String(data.default_day_start||'08:00').slice(0,5);
+  $('schedDayEnd').value=String(data.default_day_end||'18:00').slice(0,5);
+  $('schedExcludeLunch').checked=data.exclude_lunch!==false;
+  $('schedLunchStart').value=String(data.lunch_start||'12:00').slice(0,5);
+  $('schedLunchEnd').value=String(data.lunch_end||'14:00').slice(0,5);
+  $('schedStep').value=String(data.default_slot_step_minutes||15);
+}
+async function saveSchedulingSettings(e){
+  e.preventDefault();
+  const payload={default_day_start:$('schedDayStart').value,default_day_end:$('schedDayEnd').value,exclude_lunch:$('schedExcludeLunch').checked,lunch_start:$('schedLunchStart').value,lunch_end:$('schedLunchEnd').value,default_slot_step_minutes:Number($('schedStep').value)};
+  const {error}=await supabase.from('scheduling_settings').update(payload).eq('id',1);
+  if(error){showToast(error.message,5000);return;}
+  await loadSchedulingSettings();showToast('Horaires enregistrés.');
+}
+
 async function loadAdmin() {
   if(!roleCanManageUsers()) return;
 
@@ -761,6 +953,8 @@ async function loadAdmin() {
     : '<div class="empty">Aucun groupe.</div>';
 
   if(!usersError) renderAdminUsers();
+  renderEventTypesAdmin();
+  await loadSchedulingSettings();
 }
 
 function renderAdminUsers() {
@@ -1035,6 +1229,25 @@ $('prevBtn').addEventListener('click',async()=>{cursorDate=calendarView==='month
 $('nextBtn').addEventListener('click',async()=>{cursorDate=calendarView==='month'?new Date(cursorDate.getFullYear(),cursorDate.getMonth()+1,1):calendarView==='week'?addDays(cursorDate,7):addDays(cursorDate,30);await loadCalendarEvents();renderCalendar();});
 $('todayBtn').addEventListener('click',async()=>{cursorDate=startOfDay(new Date());await loadCalendarEvents();renderCalendar();});
 document.querySelectorAll('.view-btn').forEach(b=>b.addEventListener('click',async()=>{calendarView=b.dataset.calView;await loadCalendarEvents();renderCalendar();}));
+
+$('agendaSearch').addEventListener('input',renderCalendar);
+$('agendaTypeFilter').addEventListener('change',renderCalendar);
+$('agendaStatusFilter').addEventListener('change',renderCalendar);
+$('exportAgendaXlsxBtn').addEventListener('click',exportAgendaXlsx);
+$('exportAgendaCsvBtn').addEventListener('click',exportAgendaCsv);
+$('exportAgendaIcsBtn').addEventListener('click',exportAgendaIcs);
+$('shareCalendarToggle').addEventListener('change',()=>{$('shareModeSelect').disabled=!$('shareCalendarToggle').checked;});
+$('saveSharingBtn').addEventListener('click',saveMySharing);
+$('exportTeamCsvBtn').addEventListener('click',exportTeamCsv);
+$('exportTeamIcsBtn').addEventListener('click',exportTeamIcs);
+$('teamPrevBtn').addEventListener('click',async()=>{const d=new Date(`${$('teamDate').value}T12:00:00`);$('teamDate').value=toDateInput(addDays(d,-Number($('teamRange').value||5)));await refreshTeamSchedule();});
+$('teamNextBtn').addEventListener('click',async()=>{const d=new Date(`${$('teamDate').value}T12:00:00`);$('teamDate').value=toDateInput(addDays(d,Number($('teamRange').value||5)));await refreshTeamSchedule();});
+$('addEventTypeBtn').addEventListener('click',()=>openEventTypeDialog());
+$('closeEventTypeDialog').addEventListener('click',()=>$('eventTypeDialog').close());
+$('cancelEventTypeBtn').addEventListener('click',()=>$('eventTypeDialog').close());
+$('eventTypeForm').addEventListener('submit',saveEventTypeAdmin);
+$('deleteEventTypeBtn').addEventListener('click',deleteEventTypeAdmin);
+$('schedulingForm').addEventListener('submit',saveSchedulingSettings);
 $('teamGroupFilter').addEventListener('change',async()=>{teamSelectedIds.clear();renderTeamUsers();await refreshTeamSchedule();});
 $('refreshTeamBtn').addEventListener('click',async()=>{await loadReferenceData();renderTeamUsers();await refreshTeamSchedule();});
 $('teamTodayBtn').addEventListener('click',async()=>{$('teamDate').value=toDateInput(new Date());await refreshTeamSchedule();});
@@ -1076,6 +1289,6 @@ $('groupForm').addEventListener('submit',async e=>{
   await loadAdmin();
   showToast('Groupe créé.');
 });
-document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','adminPanel'].forEach(id=>$(id).hidden=true);currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team'){renderTeamUsers();await refreshTeamSchedule();}if(currentMainView==='admin')await loadAdmin();}));
+document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','adminPanel'].forEach(id=>$(id).hidden=true);currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team'){renderTeamUsers();await refreshTeamSchedule();}if(currentMainView==='settings')await loadMySettings();if(currentMainView==='admin')await loadAdmin();}));
 
 bootstrap();

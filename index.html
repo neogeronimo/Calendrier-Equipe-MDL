@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=042" />
+  <link rel="stylesheet" href="styles.css?v=050" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -23,7 +23,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.4.2 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.5.0 · prête.</div>
     </section>
   </main>
 
@@ -39,6 +39,7 @@
     <nav class="tabs" aria-label="Navigation principale">
       <button class="tab active" data-view="agenda">Mon agenda</button>
       <button class="tab" data-view="team" id="teamTab">Équipe</button>
+      <button class="tab" data-view="settings" id="settingsTab">Mes réglages</button>
       <button class="tab" data-view="admin" id="adminTab" hidden>Administration</button>
     </nav>
 
@@ -62,6 +63,22 @@
         <button class="view-btn" data-cal-view="agenda">Agenda</button>
       </div>
 
+      <div class="agenda-tools card">
+        <input id="agendaSearch" type="search" placeholder="Rechercher titre, lieu, description…" />
+        <select id="agendaTypeFilter"><option value="">Tous les types</option></select>
+        <select id="agendaStatusFilter">
+          <option value="">Tous les statuts</option>
+          <option value="confirmed">Confirmés</option>
+          <option value="tentative">Provisoires</option>
+          <option value="cancelled">Annulés</option>
+        </select>
+        <div class="export-menu">
+          <button id="exportAgendaXlsxBtn" class="ghost">Excel</button>
+          <button id="exportAgendaCsvBtn" class="ghost">CSV</button>
+          <button id="exportAgendaIcsBtn" class="ghost">ICS</button>
+        </div>
+      </div>
+
       <div id="calendarHost" class="calendar-host"></div>
     </section>
 
@@ -73,7 +90,9 @@
           <p class="muted">Visualiser plusieurs techniciens, trouver un créneau commun et créer une réunion en quelques clics.</p>
         </div>
         <div class="toolbar-actions">
+          <button id="teamPrevBtn" class="icon-btn" aria-label="Période précédente">‹</button>
           <button id="teamTodayBtn" class="ghost">Aujourd’hui</button>
+          <button id="teamNextBtn" class="icon-btn" aria-label="Période suivante">›</button>
           <button id="refreshTeamBtn" class="ghost">Actualiser</button>
         </div>
       </div>
@@ -109,7 +128,7 @@
               <h3>Calendriers sélectionnés</h3>
               <p id="teamPlanningCaption" class="muted">Sélectionne un ou plusieurs techniciens.</p>
             </div>
-            <button id="exportTeamBtn" class="ghost">Exporter Excel</button>
+            <div class="export-menu"><button id="exportTeamBtn" class="ghost">Excel</button><button id="exportTeamCsvBtn" class="ghost">CSV</button><button id="exportTeamIcsBtn" class="ghost">ICS</button></div>
           </div>
           <div id="teamSchedule" class="team-schedule">
             <div class="empty">Sélectionne des techniciens pour afficher leurs plannings.</div>
@@ -148,6 +167,37 @@
       </div>
     </section>
 
+    <section id="settingsPanel" class="panel safe-bottom" hidden>
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Préférences</p>
+          <h2>Mes réglages</h2>
+          <p class="muted">Contrôle ce que les autres utilisateurs standards peuvent voir de ton calendrier.</p>
+        </div>
+      </div>
+      <div class="settings-grid">
+        <article class="card">
+          <div class="card-head"><h3>Partage de mon calendrier</h3></div>
+          <label class="toggle-row">
+            <input id="shareCalendarToggle" type="checkbox" />
+            <span><strong>Partager mon calendrier</strong><small>Les responsables et planificateurs autorisés conservent leur accès indépendamment de ce réglage.</small></span>
+          </label>
+          <label>Mode de partage
+            <select id="shareModeSelect">
+              <option value="details">Afficher les détails</option>
+              <option value="busy_only">Afficher uniquement Occupé / Libre</option>
+            </select>
+          </label>
+          <button id="saveSharingBtn" class="primary">Enregistrer mes préférences</button>
+          <p id="sharingStatus" class="muted"></p>
+        </article>
+        <article class="card">
+          <div class="card-head"><h3>Mon compte</h3></div>
+          <div id="myAccountSummary" class="account-summary"></div>
+        </article>
+      </div>
+    </section>
+
     <section id="adminPanel" class="panel safe-bottom" hidden>
       <div class="panel-head">
         <div><p class="eyebrow">Administration</p><h2>Utilisateurs & groupes</h2></div>
@@ -179,6 +229,28 @@
             </select>
           </div>
           <div id="usersList" class="simple-list"></div>
+        </article>
+        <article class="card">
+          <div class="card-head"><div><h3>Types de rendez-vous</h3><p class="muted admin-note">Catégories et couleurs du calendrier.</p></div><button id="addEventTypeBtn" class="small-btn">+ Ajouter</button></div>
+          <div id="eventTypesAdminList" class="simple-list"></div>
+        </article>
+        <article class="card">
+          <div class="card-head"><div><h3>Horaires de planification</h3><p class="muted admin-note">Valeurs par défaut utilisées par la recherche de disponibilités.</p></div></div>
+          <form id="schedulingForm" class="stack compact-stack">
+            <div class="two-cols">
+              <label>Début de journée<input id="schedDayStart" type="time" /></label>
+              <label>Fin de journée<input id="schedDayEnd" type="time" /></label>
+            </div>
+            <label class="toggle-row"><input id="schedExcludeLunch" type="checkbox" /><span><strong>Exclure la pause déjeuner</strong></span></label>
+            <div class="two-cols">
+              <label>Début pause<input id="schedLunchStart" type="time" /></label>
+              <label>Fin pause<input id="schedLunchEnd" type="time" /></label>
+            </div>
+            <label>Pas de recherche par défaut
+              <select id="schedStep"><option value="15">15 min</option><option value="30">30 min</option><option value="60">60 min</option></select>
+            </label>
+            <button class="primary" type="submit">Enregistrer les horaires</button>
+          </form>
         </article>
       </div>
     </section>
@@ -313,6 +385,19 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=042"></script>
+  <script type="module" src="app.js?v=050"></script>
+
+  <dialog id="eventTypeDialog">
+    <form id="eventTypeForm" class="stack dialog-card">
+      <div class="dialog-title-row"><div><p class="eyebrow">Administration</p><h2 id="eventTypeDialogTitle">Type de rendez-vous</h2></div><button type="button" id="closeEventTypeDialog" class="icon-btn">×</button></div>
+      <input id="eventTypeAdminId" type="hidden" />
+      <label>Nom<input id="eventTypeAdminName" required maxlength="80" /></label>
+      <label>Description<input id="eventTypeAdminDescription" maxlength="200" /></label>
+      <label>Couleur<input id="eventTypeAdminColor" type="color" value="#5b4fd6" /></label>
+      <label class="toggle-row"><input id="eventTypeAdminActive" type="checkbox" checked /><span><strong>Type actif</strong></span></label>
+      <p id="eventTypeAdminError" class="error" hidden></p>
+      <div class="dialog-actions"><button type="button" id="deleteEventTypeBtn" class="danger" hidden>Supprimer</button><span></span><button type="button" id="cancelEventTypeBtn" class="ghost">Annuler</button><button type="submit" class="primary">Enregistrer</button></div>
+    </form>
+  </dialog>
 </body>
 </html>

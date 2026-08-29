@@ -1,24 +1,53 @@
-CALENDRIER ÉQUIPE MDL v0.4.2
+CALENDRIER ÉQUIPE MDL v0.5.0 — GROS LOT FONCTIONNEL
 
-CORRECTIF JOURNÉE ENTIÈRE
+Cette version regroupe plusieurs évolutions en une seule livraison.
 
-Problème :
-Un rendez-vous coché "Journée entière" conservait ses heures internes
-(ex. 08:15-09:15). La recherche de disponibilités voyait alors le technicien
-comme occupé uniquement pendant cette heure.
+AGENDA
+- Recherche instantanée dans titre / lieu / description.
+- Filtre par type.
+- Filtre par statut.
+- Export Excel.
+- Export CSV.
+- Export ICS compatible Outlook / Google Calendar / Apple Calendar.
+- Vue semaine améliorée avec vraie ligne "Journée entière".
+- Double-clic conservé pour créer rapidement un rendez-vous.
 
-Correction :
-- la recherche lit maintenant le champ all_day ;
-- un événement Journée entière bloque toute la journée concernée ;
-- cela fonctionne aussi pour les rendez-vous où le technicien est participant ;
-- les événements annulés et participations refusées restent ignorés.
+PLANNING ÉQUIPE
+- Navigation période précédente / suivante.
+- Planning 1 / 3 / 5 / 7 jours.
+- Recherche précise des disponibilités communes.
+- Journées entières réellement bloquantes.
+- Réunions multi-participants.
+- Exports Excel / CSV / ICS.
+
+MES RÉGLAGES
+- Chaque utilisateur peut activer/désactiver le partage volontaire de son calendrier.
+- Choix "Détails" ou "Occupé / Libre".
+- Résumé du compte, rôle et groupes.
+
+ADMINISTRATION
+- Gestion des utilisateurs et groupes conservée.
+- Gestion des types de rendez-vous et de leur couleur.
+- Réglage des horaires de planification par défaut.
+- Réglage de la pause déjeuner.
+- Réglage du pas de recherche de créneaux.
+
+MOBILE
+- Navigation principale adaptée aux petits écrans.
+- Safe areas conservées.
+- Exports et outils réorganisés en responsive.
 
 INSTALLATION
-Aucun SQL.
-Aucune Edge Function.
+Si la v0.4.2 fonctionne déjà :
+- AUCUN SQL.
+- AUCUNE Edge Function.
+- Remplacer sur GitHub :
+  * index.html
+  * app.js
+  * styles.css
+- Attendre GitHub Pages.
+- Ctrl+F5.
 
-Sur GitHub remplacer uniquement :
-- index.html
-- app.js
-
-Puis attendre GitHub Pages et faire Ctrl+F5.
+NOTE
+La gestion des types de rendez-vous et des horaires est réservée à l'administrateur
+selon les politiques RLS déjà installées dans le projet.
