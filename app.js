@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=103';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=104';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -32,13 +32,13 @@ let deferredInstallPrompt=null;
 let teamAbsenceOnly=false;
 let notificationTimer=null;
 let schedulingSettings = null;
-const APP_VERSION='1.0.3';
+const APP_VERSION='1.0.4';
 let lastSuccessfulSync=null;
 let diagnosticsText='';
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 1.0.3 · ${message}`;
+  if (box) box.textContent = `Version 1.0.4 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -1877,7 +1877,7 @@ function installPwa(){
   if('serviceWorker' in navigator){
     window.addEventListener('load',async()=>{
       try{
-        const reg=await navigator.serviceWorker.register('./sw.js?v=103');
+        const reg=await navigator.serviceWorker.register('./sw.js?v=104');
         await reg.update();
         if(reg.waiting)showToast('Une mise à jour est prête. Recharge l’application.',5000);
       }catch(err){console.warn('Service Worker',err)}
@@ -1991,6 +1991,64 @@ function startNotificationLoop(){
   maybeSendBrowserReminder();
   notificationTimer=setInterval(()=>{buildLocalNotifications();maybeSendBrowserReminder()},30000);
 }
+
+function androidNotificationHelp(){
+  return 'Android bloque actuellement les notifications. Ouvre Paramètres Android > Applications > Calendrier Équipe MDL (ou Chrome) > Notifications, puis autorise-les.';
+}
+async function ensureNotificationPermission(){
+  if(!('Notification' in window))return 'unsupported';
+  if(Notification.permission==='granted')return 'granted';
+  if(Notification.permission==='denied')return 'denied';
+  try{
+    return await Notification.requestPermission();
+  }catch(err){
+    console.error('Demande autorisation notifications',err);
+    return Notification.permission||'default';
+  }
+}
+async function handleNotificationToggle(){
+  const box=$('notificationsEnabled');
+  if(!box.checked){
+    const p=notificationPrefs();
+    saveNotificationPrefs({...p,enabled:false,saved_at:new Date().toISOString()});
+    $('notificationSettingsStatus').textContent='Rappels désactivés et mémorisés.';
+    startNotificationLoop();
+    return;
+  }
+
+  $('notificationSettingsStatus').textContent='Demande d’autorisation Android…';
+  const permission=await ensureNotificationPermission();
+
+  if(permission==='granted'){
+    const p=notificationPrefs();
+    saveNotificationPrefs({
+      ...p,
+      enabled:true,
+      minutes:Number($('notificationReminderMinutes').value||30),
+      changes:$('notifyMeetingChanges').checked,
+      saved_at:new Date().toISOString()
+    });
+    box.checked=true;
+    $('notificationSettingsStatus').textContent='Notifications Android autorisées · rappels activés et mémorisés.';
+    startNotificationLoop();
+    return;
+  }
+
+  box.checked=false;
+  const p=notificationPrefs();
+  saveNotificationPrefs({...p,enabled:false,saved_at:new Date().toISOString()});
+  if(permission==='denied'){
+    $('notificationSettingsStatus').textContent='Notifications refusées par Android. Autorise-les dans les paramètres système.';
+    showToast(androidNotificationHelp(),8000);
+  }else if(permission==='unsupported'){
+    $('notificationSettingsStatus').textContent='Notifications non prises en charge sur cet appareil.';
+    showToast('Les notifications ne sont pas prises en charge par ce navigateur.',6000);
+  }else{
+    $('notificationSettingsStatus').textContent='Autorisation non accordée. Réessaie en touchant Activer les notifications.';
+    showToast('Android n’a pas accordé l’autorisation de notification.',6000);
+  }
+}
+
 async function loadNotificationSettings(){
   const p=notificationPrefs();
   const permission=('Notification' in window)?Notification.permission:'unsupported';
@@ -2017,31 +2075,68 @@ async function loadNotificationSettings(){
   renderPwaStatus();
 }
 async function saveNotificationSettings(){
-  let enabled=$('notificationsEnabled').checked;
-  if(enabled && 'Notification' in window && Notification.permission!=='granted'){
-    const permission=await Notification.requestPermission();
-    if(permission!=='granted')enabled=false;
+  if($('notificationsEnabled').checked){
+    const permission=await ensureNotificationPermission();
+    if(permission!=='granted'){
+      $('notificationsEnabled').checked=false;
+      saveNotificationPrefs({
+        enabled:false,
+        minutes:Number($('notificationReminderMinutes').value),
+        changes:$('notifyMeetingChanges').checked,
+        saved_at:new Date().toISOString()
+      });
+      $('notificationSettingsStatus').textContent=permission==='denied'
+        ? 'Notifications refusées par Android. Autorise-les dans les paramètres système.'
+        : 'Autorisation Android non accordée.';
+      if(permission==='denied')showToast(androidNotificationHelp(),8000);
+      return;
+    }
   }
   const prefs={
-    enabled,
+    enabled:$('notificationsEnabled').checked,
     minutes:Number($('notificationReminderMinutes').value),
     changes:$('notifyMeetingChanges').checked,
     saved_at:new Date().toISOString()
   };
   saveNotificationPrefs(prefs);
-  $('notificationsEnabled').checked=enabled;
-  $('notificationSettingsStatus').textContent=enabled?'Notifications activées et mémorisées.':'Notifications désactivées et mémorisées.';
+  $('notificationSettingsStatus').textContent=prefs.enabled
+    ? 'Notifications Android autorisées · réglages mémorisés.'
+    : 'Notifications désactivées et mémorisées.';
   startNotificationLoop();
 }
 async function testNotification(){
   if(!('Notification' in window)){showToast('Notifications non prises en charge.');return}
-  if(Notification.permission!=='granted'){showToast('Active d’abord les notifications.');return}
+  const permission=await ensureNotificationPermission();
+  if(permission!=='granted'){
+    $('notificationsEnabled').checked=false;
+    const p=notificationPrefs();
+    saveNotificationPrefs({...p,enabled:false,saved_at:new Date().toISOString()});
+    $('notificationSettingsStatus').textContent=permission==='denied'
+      ? 'Notifications refusées par Android.'
+      : 'Autorisation Android non accordée.';
+    showToast(permission==='denied'?androidNotificationHelp():'Autorise les notifications dans la fenêtre Android puis réessaie.',8000);
+    return;
+  }
+
+  $('notificationsEnabled').checked=true;
+  const p=notificationPrefs();
+  saveNotificationPrefs({
+    ...p,
+    enabled:true,
+    minutes:Number($('notificationReminderMinutes').value||30),
+    changes:$('notifyMeetingChanges').checked,
+    saved_at:new Date().toISOString()
+  });
+
   const ok=await showSystemNotification('Calendrier Équipe MDL',{
-    body:'Test Android réussi. Si aucun son n’est joué, vérifie le canal de notifications Android.',
+    body:'Test Android réussi. Les notifications système sont bien autorisées.',
     tag:'mdl-test',
     data:{url:location.href}
   });
-  showToast(ok?'Notification de test envoyée.':'Impossible d’afficher la notification.');
+  $('notificationSettingsStatus').textContent=ok
+    ? 'Test envoyé · notifications activées et mémorisées.'
+    : 'Autorisation accordée, mais Android n’a pas affiché la notification.';
+  showToast(ok?'Notification de test envoyée.':'Impossible d’afficher la notification.',6000);
 }
 function renderPwaStatus(){
   if(!$('pwaStatus'))return;
@@ -2183,12 +2278,13 @@ $('markNotificationsReadBtn').addEventListener('click',()=>{const set=new Set(lo
 $('drawerSettingsBtn').addEventListener('click',()=>{$('notificationDrawer').hidden=true;setMainView('settings');});
 $('openNotificationSettingsBtn').addEventListener('click',()=>setMainView('settings'));
 $('saveNotificationSettingsBtn').addEventListener('click',saveNotificationSettings);
-['notificationsEnabled','notificationReminderMinutes','notifyMeetingChanges'].forEach(id=>{
+$('notificationsEnabled').addEventListener('change',handleNotificationToggle);
+['notificationReminderMinutes','notifyMeetingChanges'].forEach(id=>{
   $(id).addEventListener('change',()=>{
     const current=notificationPrefs();
     saveNotificationPrefs({
       ...current,
-      enabled:$('notificationsEnabled').checked,
+      enabled:$('notificationsEnabled').checked && ('Notification' in window) && Notification.permission==='granted',
       minutes:Number($('notificationReminderMinutes').value),
       changes:$('notifyMeetingChanges').checked,
       saved_at:new Date().toISOString()
