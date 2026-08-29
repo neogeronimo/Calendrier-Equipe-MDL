@@ -93,3 +93,8 @@ input,select,textarea{
   .team-schedule-head,.team-person-row{grid-template-columns:150px repeat(var(--team-days),minmax(135px,1fr))}
   .participant-tools{grid-template-columns:1fr}
 }
+
+.selected-participants-summary{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 10px}
+.selected-participant-chip{display:inline-flex;align-items:center;border-radius:999px;padding:6px 9px;background:var(--primary-soft);font-size:.78rem;font-weight:800}
+.availability-meta{margin:10px 0;padding:10px 12px;border-radius:12px;background:#f7f8fb;color:var(--muted);font-size:.82rem}
+.slot-reason{font-size:.75rem;color:var(--muted);margin-top:3px}

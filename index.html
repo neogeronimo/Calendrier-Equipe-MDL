@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=040" />
+  <link rel="stylesheet" href="styles.css?v=041" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -23,7 +23,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.4.0 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.4.1 · prête.</div>
     </section>
   </main>
 
@@ -200,6 +200,7 @@
           <input id="participantSearch" type="search" placeholder="Rechercher un participant…" />
           <button id="clearParticipantsBtn" type="button" class="ghost">Effacer</button>
         </div>
+        <div id="selectedParticipantsSummary" class="selected-participants-summary"></div>
         <div id="eventParticipants" class="check-list compact-check-list"></div>
       </fieldset>
       <label>Titre<input id="eventTitle" maxlength="140" required placeholder="Ex. Intervention, réunion..." /></label>
@@ -312,6 +313,6 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=040"></script>
+  <script type="module" src="app.js?v=041"></script>
 </body>
 </html>
