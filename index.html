@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=050" />
+  <link rel="stylesheet" href="styles.css?v=051" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -23,7 +23,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.5.0 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.5.1 · prête.</div>
     </section>
   </main>
 
@@ -113,6 +113,12 @@
               <option value="7">7 jours</option>
             </select>
           </label>
+          <label>Détail
+            <select id="teamDetailMode">
+              <option value="detailed" selected>Détaillé</option>
+              <option value="compact">Compact</option>
+            </select>
+          </label>
           <div class="team-quick-actions">
             <button id="selectAllTeamBtn" class="small-btn" type="button">Tout sélectionner</button>
             <button id="clearTeamBtn" class="ghost" type="button">Effacer</button>
@@ -130,6 +136,7 @@
             </div>
             <div class="export-menu"><button id="exportTeamBtn" class="ghost">Excel</button><button id="exportTeamCsvBtn" class="ghost">CSV</button><button id="exportTeamIcsBtn" class="ghost">ICS</button></div>
           </div>
+          <div id="teamPlanningStats" class="team-planning-stats" hidden></div>
           <div id="teamSchedule" class="team-schedule">
             <div class="empty">Sélectionne des techniciens pour afficher leurs plannings.</div>
           </div>
@@ -385,7 +392,7 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=050"></script>
+  <script type="module" src="app.js?v=051"></script>
 
   <dialog id="eventTypeDialog">
     <form id="eventTypeForm" class="stack dialog-card">

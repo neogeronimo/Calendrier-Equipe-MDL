@@ -1,53 +1,39 @@
-CALENDRIER ÉQUIPE MDL v0.5.0 — GROS LOT FONCTIONNEL
+CALENDRIER ÉQUIPE MDL v0.5.1
 
-Cette version regroupe plusieurs évolutions en une seule livraison.
+CORRECTIF / AMÉLIORATION VUE PLANIFICATEUR
 
-AGENDA
-- Recherche instantanée dans titre / lieu / description.
-- Filtre par type.
-- Filtre par statut.
-- Export Excel.
-- Export CSV.
-- Export ICS compatible Outlook / Google Calendar / Apple Calendar.
-- Vue semaine améliorée avec vraie ligne "Journée entière".
-- Double-clic conservé pour créer rapidement un rendez-vous.
+La vue "Calendriers sélectionnés" était fonctionnelle mais trop compacte pour un
+planificateur, responsable ou administrateur.
 
-PLANNING ÉQUIPE
-- Navigation période précédente / suivante.
-- Planning 1 / 3 / 5 / 7 jours.
-- Recherche précise des disponibilités communes.
-- Journées entières réellement bloquantes.
-- Réunions multi-participants.
-- Exports Excel / CSV / ICS.
-
-MES RÉGLAGES
-- Chaque utilisateur peut activer/désactiver le partage volontaire de son calendrier.
-- Choix "Détails" ou "Occupé / Libre".
-- Résumé du compte, rôle et groupes.
-
-ADMINISTRATION
-- Gestion des utilisateurs et groupes conservée.
-- Gestion des types de rendez-vous et de leur couleur.
-- Réglage des horaires de planification par défaut.
-- Réglage de la pause déjeuner.
-- Réglage du pas de recherche de créneaux.
-
-MOBILE
-- Navigation principale adaptée aux petits écrans.
-- Safe areas conservées.
-- Exports et outils réorganisés en responsive.
+NOUVELLE VUE DÉTAILLÉE
+- Le planning équipe utilise désormais toute la largeur disponible.
+- Le panneau de recherche de créneaux passe sous le planning.
+- Colonnes de jours beaucoup plus larges.
+- Colonne technicien élargie.
+- Chaque événement affiche :
+  * titre,
+  * heure ou Journée entière,
+  * lieu,
+  * type,
+  * propriétaire / participant,
+  * statut.
+- Survol = détail complet dans une infobulle.
+- Statistiques globales de la période :
+  * nombre de techniciens,
+  * nombre de rendez-vous,
+  * journées entières,
+  * heures planifiées.
+- Statistiques par technicien.
+- Nouveau choix "Détaillé / Compact" dans les filtres.
+- Le mode détaillé est sélectionné par défaut.
 
 INSTALLATION
-Si la v0.4.2 fonctionne déjà :
-- AUCUN SQL.
-- AUCUNE Edge Function.
-- Remplacer sur GitHub :
-  * index.html
-  * app.js
-  * styles.css
-- Attendre GitHub Pages.
-- Ctrl+F5.
+Aucun SQL.
+Aucune Edge Function.
 
-NOTE
-La gestion des types de rendez-vous et des horaires est réservée à l'administrateur
-selon les politiques RLS déjà installées dans le projet.
+Sur GitHub remplacer :
+- index.html
+- app.js
+- styles.css
+
+Puis attendre GitHub Pages et faire Ctrl+F5.

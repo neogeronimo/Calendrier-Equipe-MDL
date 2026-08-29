@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=050';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=051';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -27,7 +27,7 @@ let schedulingSettings = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.5.0 · ${message}`;
+  if (box) box.textContent = `Version 0.5.1 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -584,37 +584,116 @@ async function refreshTeamSchedule() {
 
 function renderTeamSchedule(ids,start,days) {
   const users=ids.map(id=>profiles.find(p=>p.id===id)).filter(Boolean);
+  const detailMode=$('teamDetailMode')?.value||'detailed';
+  $('teamSchedule').classList.toggle('compact',detailMode==='compact');
+
   $('teamPlanningCaption').textContent=`${users.length} technicien${users.length>1?'s':''} · ${fmtDate(start,{day:'2-digit',month:'short'})} → ${fmtDate(addDays(start,days-1),{day:'2-digit',month:'short',year:'numeric'})}`;
+
+  // Statistiques globales utiles au planificateur.
+  const periodEnd=addDays(start,days);
+  const relevant=teamEvents.filter(ev=>new Date(ev.starts_at)<periodEnd && new Date(ev.ends_at)>start && ev.status!=='cancelled');
+  const allDayCount=relevant.filter(ev=>ev.all_day).length;
+  const timedCount=relevant.filter(ev=>!ev.all_day).length;
+  const busyHours=relevant.filter(ev=>!ev.all_day).reduce((sum,ev)=>{
+    const a=Math.max(new Date(ev.starts_at).getTime(),start.getTime());
+    const b=Math.min(new Date(ev.ends_at).getTime(),periodEnd.getTime());
+    return sum+Math.max(0,(b-a)/3600000);
+  },0);
+
+  $('teamPlanningStats').hidden=false;
+  $('teamPlanningStats').innerHTML=`
+    <div class="team-stat"><span>👥</span><strong>${users.length}</strong><span>technicien${users.length>1?'s':''}</span></div>
+    <div class="team-stat"><span>📅</span><strong>${timedCount}</strong><span>rendez-vous horaires</span></div>
+    <div class="team-stat"><span>🗓️</span><strong>${allDayCount}</strong><span>journée${allDayCount>1?'s':''} entière${allDayCount>1?'s':''}</span></div>
+    <div class="team-stat"><span>⏱️</span><strong>${busyHours.toFixed(1).replace('.',',')} h</strong><span>planifiées</span></div>`;
 
   let html=`<div class="team-schedule-table" style="--team-days:${days}">`;
   html+=`<div class="team-schedule-head"><div>Technicien</div>`;
   for(let d=0;d<days;d++){
     const day=addDays(start,d);
-    html+=`<div>${escapeHtml(fmtDate(day,{weekday:'short',day:'2-digit',month:'short'}))}</div>`;
+    html+=`<div>${escapeHtml(fmtDate(day,{weekday:'long',day:'2-digit',month:'short'}))}</div>`;
   }
   html+='</div>';
 
   for(const user of users){
-    html+=`<div class="team-person-row"><div class="team-person"><strong>${escapeHtml(profileName(user))}</strong><small>${escapeHtml(groupNamesForUser(user.id).join(', '))}</small></div>`;
+    const userPeriodEvents=teamEvents.filter(ev=>{
+      const applies=ev.owner_id===user.id || (ev.participant_user_ids||[]).includes(user.id);
+      return applies && new Date(ev.starts_at)<periodEnd && new Date(ev.ends_at)>start && ev.status!=='cancelled';
+    });
+    const userTimed=userPeriodEvents.filter(ev=>!ev.all_day);
+    const userHours=userTimed.reduce((sum,ev)=>{
+      const a=Math.max(new Date(ev.starts_at).getTime(),start.getTime());
+      const b=Math.min(new Date(ev.ends_at).getTime(),periodEnd.getTime());
+      return sum+Math.max(0,(b-a)/3600000);
+    },0);
+
+    html+=`<div class="team-person-row">
+      <div class="team-person">
+        <strong>${escapeHtml(profileName(user))}</strong>
+        <small>${escapeHtml(groupNamesForUser(user.id).join(', ')||'Technicien')}</small>
+        <div class="person-metrics">
+          <span>📌 ${userPeriodEvents.length} événement${userPeriodEvents.length>1?'s':''}</span>
+          <span>⏱️ ${userHours.toFixed(1).replace('.',',')} h planifiées</span>
+          <span>🗓️ ${userPeriodEvents.filter(e=>e.all_day).length} journée(s) entière(s)</span>
+        </div>
+      </div>`;
+
     for(let d=0;d<days;d++){
       const day=addDays(start,d),dayEnd=addDays(day,1);
       const list=teamEvents.filter(ev=>{
         const applies=ev.owner_id===user.id || (ev.participant_user_ids||[]).includes(user.id);
         return applies && new Date(ev.starts_at)<dayEnd && new Date(ev.ends_at)>day && ev.status!=='cancelled';
-      }).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+      }).sort((a,b)=>{
+        if(a.all_day!==b.all_day)return a.all_day?-1:1;
+        return new Date(a.starts_at)-new Date(b.starts_at);
+      });
+
       html+=`<div class="team-day-cell" data-team-day="${toDateInput(day)}" data-team-user="${user.id}">`;
-      if(!list.length)html+='<span class="team-empty-day">Libre</span>';
+
+      if(!list.length){
+        html+='<span class="team-empty-day">Libre</span>';
+      }
+
       for(const ev of list){
         const participantOnly=ev.owner_id!==user.id;
-        html+=`<button class="team-event-chip ${participantOnly?'participant-event':''}" data-team-event="${ev.id}" style="border-left-color:${escapeHtml(eventColor(ev))}">
+        const type=eventTypes.find(t=>t.id===ev.event_type_id);
+        const timeText=ev.all_day?'Journée entière':`${fmtTime(new Date(ev.starts_at))}–${fmtTime(new Date(ev.ends_at))}`;
+        const statusLabel=ev.status==='tentative'?'Provisoire':ev.status==='cancelled'?'Annulé':'Confirmé';
+        const details=[
+          ev.location?`📍 ${escapeHtml(ev.location)}`:'',
+          type?.name?`🏷️ ${escapeHtml(type.name)}`:'',
+          participantOnly?'👥 Participant':'👤 Propriétaire',
+          `● ${statusLabel}`
+        ].filter(Boolean);
+
+        const tooltip=[
+          ev.title,
+          timeText,
+          ev.location||'',
+          type?.name||'',
+          participantOnly?'Participant':'Propriétaire',
+          statusLabel,
+          ev.description||''
+        ].filter(Boolean).join(' · ');
+
+        html+=`<button
+          class="team-event-chip ${participantOnly?'participant-event':''}"
+          data-team-event="${ev.id}"
+          title="${escapeHtml(tooltip)}"
+          style="border-left-color:${escapeHtml(eventColor(ev))}">
           <strong>${escapeHtml(ev.title)}</strong>
-          <span>${ev.all_day?'Journée entière':`${fmtTime(new Date(ev.starts_at))}–${fmtTime(new Date(ev.ends_at))}`}${participantOnly?' · participant':''}</span>
+          <span class="team-event-time">${escapeHtml(timeText)}</span>
+          <span class="team-event-details">
+            ${details.map(x=>`<span>${x}</span>`).join('')}
+          </span>
         </button>`;
       }
+
       html+='</div>';
     }
     html+='</div>';
   }
+
   html+='</div>';
   $('teamSchedule').innerHTML=html;
 
@@ -623,152 +702,6 @@ function renderTeamSchedule(ids,start,days) {
     const a=new Date(`${cell.dataset.teamDay}T09:00:00`);
     openNewEvent(a,cell.dataset.teamUser);
   }));
-}
-
-
-function hmToMinutes(value){
-  const [h,m]=String(value||'00:00').split(':').map(Number);
-  return h*60+(m||0);
-}
-function isoDay(date){
-  const d=date.getDay();
-  return d===0?7:d;
-}
-function atMinutes(day,mins){
-  const d=new Date(day);
-  d.setHours(Math.floor(mins/60),mins%60,0,0);
-  return d;
-}
-function overlaps(aStart,aEnd,bStart,bEnd){ return aStart < bEnd && aEnd > bStart; }
-
-async function getUserBusySlots(userId,start,end){
-  // On lit les événements avec all_day, car get_busy_slots() ne transporte
-  // que starts_at / ends_at et ne permet donc pas de savoir qu'une journée
-  // doit être bloquée entièrement.
-  const ownedRes=await supabase
-    .from('events')
-    .select('id,starts_at,ends_at,all_day,status')
-    .eq('owner_id',userId)
-    .neq('status','cancelled')
-    .lt('starts_at',end.toISOString())
-    .gt('ends_at',start.toISOString());
-
-  if(ownedRes.error)throw ownedRes.error;
-
-  const partRes=await supabase
-    .from('event_participants')
-    .select('event_id,participation_status')
-    .eq('user_id',userId)
-    .neq('participation_status','declined');
-
-  if(partRes.error)throw partRes.error;
-
-  const eventIds=[...new Set((partRes.data||[]).map(x=>x.event_id))];
-  let participantEvents=[];
-
-  if(eventIds.length){
-    const evRes=await supabase
-      .from('events')
-      .select('id,starts_at,ends_at,all_day,status')
-      .in('id',eventIds)
-      .neq('status','cancelled')
-      .lt('starts_at',end.toISOString())
-      .gt('ends_at',start.toISOString());
-
-    if(evRes.error)throw evRes.error;
-    participantEvents=evRes.data||[];
-  }
-
-  const byId=new Map();
-  [...(ownedRes.data||[]),...participantEvents].forEach(ev=>byId.set(ev.id,ev));
-
-  return [...byId.values()].map(ev=>{
-    const rawStart=new Date(ev.starts_at);
-    const rawEnd=new Date(ev.ends_at);
-
-    if(ev.all_day){
-      // Une "journée entière" bloque réellement toute la ou les journées
-      // couvertes, même si les heures internes du rendez-vous sont 08:15-09:15.
-      const busyStart=new Date(rawStart);
-      busyStart.setHours(0,0,0,0);
-
-      const busyEnd=new Date(rawEnd);
-      busyEnd.setHours(0,0,0,0);
-
-      // Si début et fin sont le même jour, on bloque jusqu'au lendemain.
-      if(busyEnd <= busyStart){
-        busyEnd.setDate(busyStart.getDate()+1);
-      } else if(
-        rawEnd.getHours()!==0 || rawEnd.getMinutes()!==0 ||
-        rawEnd.getSeconds()!==0 || rawEnd.getMilliseconds()!==0
-      ){
-        // Si la fin porte une heure quelconque, la journée de fin est aussi bloquée.
-        busyEnd.setDate(busyEnd.getDate()+1);
-      }
-
-      return {start:busyStart,end:busyEnd,all_day:true};
-    }
-
-    return {start:rawStart,end:rawEnd,all_day:false};
-  });
-}
-
-async function computeCommonSlots(ids,start,end,duration,step,maxResults=20){
-  const [whRes,setRes,...busyLists]=await Promise.all([
-    supabase.from('working_hours').select('user_id,day_of_week,start_time,end_time,is_active').in('user_id',ids).eq('is_active',true),
-    supabase.from('scheduling_settings').select('*').eq('id',1).maybeSingle(),
-    ...ids.map(id=>getUserBusySlots(id,start,end))
-  ]);
-  if(whRes.error)throw whRes.error;
-  if(setRes.error)throw setRes.error;
-
-  const settings=setRes.data||{};
-  const defStart=hmToMinutes(settings.default_day_start||'08:00');
-  const defEnd=hmToMinutes(settings.default_day_end||'18:00');
-  const lunchStart=hmToMinutes(settings.lunch_start||'12:00');
-  const lunchEnd=hmToMinutes(settings.lunch_end||'14:00');
-  const excludeLunch=settings.exclude_lunch!==false;
-
-  const whByUser=new Map(ids.map(id=>[id,[]]));
-  (whRes.data||[]).forEach(r=>whByUser.get(r.user_id)?.push(r));
-  const busyByUser=new Map(ids.map((id,i)=>[id,busyLists[i]||[]]));
-
-  const results=[];
-  const day=new Date(start);
-  day.setHours(0,0,0,0);
-
-  while(day<=end && results.length<maxResults){
-    const dow=isoDay(day);
-    const userWindows=ids.map(id=>{
-      const all=whByUser.get(id)||[];
-      const custom=all.filter(r=>Number(r.day_of_week)===dow)
-        .map(r=>({start:hmToMinutes(r.start_time),end:hmToMinutes(r.end_time)}));
-      const windows=all.length ? custom : ((dow>=1&&dow<=5)?[{start:defStart,end:defEnd}]:[]);
-      return {id,windows};
-    });
-
-    const everyHasWork=userWindows.every(x=>x.windows.length>0);
-    if(everyHasWork){
-      const scanStart=Math.max(...userWindows.map(x=>Math.min(...x.windows.map(w=>w.start))));
-      const scanEnd=Math.min(...userWindows.map(x=>Math.max(...x.windows.map(w=>w.end))));
-
-      for(let mins=scanStart;mins+duration<=scanEnd && results.length<maxResults;mins+=step){
-        const slotStart=atMinutes(day,mins);
-        const slotEnd=new Date(slotStart.getTime()+duration*60000);
-        if(slotStart<start || slotEnd>end || slotStart<new Date())continue;
-        if(excludeLunch && overlaps(mins,mins+duration,lunchStart,lunchEnd))continue;
-
-        let ok=true;
-        for(const {id,windows} of userWindows){
-          if(!windows.some(w=>mins>=w.start && mins+duration<=w.end)){ok=false;break;}
-          if((busyByUser.get(id)||[]).some(b=>overlaps(slotStart,slotEnd,b.start,b.end))){ok=false;break;}
-        }
-        if(ok)results.push({slot_start:slotStart.toISOString(),slot_end:slotEnd.toISOString()});
-      }
-    }
-    day.setDate(day.getDate()+1);
-  }
-  return results;
 }
 
 async function searchSlots(e) {
@@ -1253,6 +1186,7 @@ $('refreshTeamBtn').addEventListener('click',async()=>{await loadReferenceData()
 $('teamTodayBtn').addEventListener('click',async()=>{$('teamDate').value=toDateInput(new Date());await refreshTeamSchedule();});
 $('teamDate').addEventListener('change',refreshTeamSchedule);
 $('teamRange').addEventListener('change',refreshTeamSchedule);
+$('teamDetailMode').addEventListener('change',refreshTeamSchedule);
 $('selectAllTeamBtn').addEventListener('click',async()=>{document.querySelectorAll('.team-user-check').forEach(cb=>{cb.checked=true;teamSelectedIds.add(cb.value);});await refreshTeamSchedule();});
 $('clearTeamBtn').addEventListener('click',async()=>{document.querySelectorAll('.team-user-check').forEach(cb=>cb.checked=false);teamSelectedIds.clear();await refreshTeamSchedule();});
 $('exportTeamBtn').addEventListener('click',exportTeamPlanningExcel);

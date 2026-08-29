@@ -134,3 +134,130 @@ input,select,textarea{
   .agenda-tools input,.agenda-tools .export-menu{grid-column:auto}
   .export-menu button{flex:1}
 }
+
+
+/* v0.5.1 — vue planificateur détaillée */
+.team-workspace{
+  grid-template-columns:1fr!important;
+}
+.common-slot-card{
+  position:static!important;
+}
+.team-planning-card{
+  width:100%;
+}
+.team-filter-row{
+  grid-template-columns:minmax(220px,1fr) 160px 150px 150px auto;
+}
+.team-planning-stats{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:0 0 12px;
+}
+.team-stat{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:#fafbfe;
+  font-size:.78rem;
+}
+.team-stat strong{font-size:.88rem}
+.team-schedule-table{
+  min-width:max(980px,calc(240px + (var(--team-days) * 250px)))!important;
+}
+.team-schedule-head,.team-person-row{
+  grid-template-columns:240px repeat(var(--team-days),minmax(250px,1fr))!important;
+}
+.team-schedule-head > div{
+  min-height:54px;
+  display:flex;
+  align-items:center;
+}
+.team-person-row > div{
+  padding:12px!important;
+}
+.team-person{
+  min-height:150px;
+}
+.team-person strong{
+  font-size:.95rem;
+}
+.team-person .person-metrics{
+  display:grid;
+  gap:4px;
+  margin-top:10px;
+  font-size:.74rem;
+  color:var(--muted);
+}
+.team-day-cell{
+  min-height:150px!important;
+  gap:9px!important;
+}
+.team-event-chip{
+  padding:10px 11px!important;
+  min-height:76px;
+  border-left-width:5px!important;
+}
+.team-event-chip strong{
+  font-size:.87rem!important;
+  white-space:normal!important;
+  line-height:1.25;
+}
+.team-event-time{
+  font-weight:800;
+  color:var(--text)!important;
+  margin-top:5px!important;
+}
+.team-event-details{
+  display:grid!important;
+  gap:2px;
+  margin-top:5px!important;
+  white-space:normal;
+}
+.team-event-details span{
+  display:block;
+  font-size:.72rem!important;
+  color:var(--muted);
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.team-event-type{
+  display:inline-flex!important;
+  width:max-content;
+  max-width:100%;
+  padding:2px 6px;
+  border-radius:999px;
+  background:rgba(91,79,214,.08);
+}
+.team-schedule.compact .team-schedule-table{
+  min-width:max(760px,calc(190px + (var(--team-days) * 160px)))!important;
+}
+.team-schedule.compact .team-schedule-head,
+.team-schedule.compact .team-person-row{
+  grid-template-columns:190px repeat(var(--team-days),minmax(160px,1fr))!important;
+}
+.team-schedule.compact .team-day-cell,
+.team-schedule.compact .team-person{
+  min-height:96px!important;
+}
+.team-schedule.compact .team-event-chip{
+  min-height:0;
+  padding:7px 8px!important;
+}
+.team-schedule.compact .team-event-details,
+.team-schedule.compact .person-metrics{
+  display:none!important;
+}
+@media(max-width:950px){
+  .team-filter-row{grid-template-columns:1fr 1fr}
+  .team-filter-row label:first-child{grid-column:1/-1}
+  .team-quick-actions{grid-column:1/-1}
+}
+@media(max-width:620px){
+  .team-filter-row{grid-template-columns:1fr}
+  .team-filter-row label:first-child,.team-quick-actions{grid-column:auto}
+}
