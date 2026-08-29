@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=032" />
+  <link rel="stylesheet" href="styles.css?v=040" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -23,7 +23,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.3.2 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.4.0 · prête.</div>
     </section>
   </main>
 
@@ -66,21 +66,57 @@
     </section>
 
     <section id="teamPanel" class="panel safe-bottom" hidden>
-      <div class="panel-head">
-        <div><p class="eyebrow">Planification</p><h2>Vue équipe</h2></div>
-        <button id="refreshTeamBtn" class="ghost">Actualiser</button>
+      <div class="panel-head team-head">
+        <div>
+          <p class="eyebrow">Planification</p>
+          <h2>Planning équipe</h2>
+          <p class="muted">Visualiser plusieurs techniciens, trouver un créneau commun et créer une réunion en quelques clics.</p>
+        </div>
+        <div class="toolbar-actions">
+          <button id="teamTodayBtn" class="ghost">Aujourd’hui</button>
+          <button id="refreshTeamBtn" class="ghost">Actualiser</button>
+        </div>
       </div>
 
-      <div class="team-grid">
-        <article class="card">
-          <div class="card-head"><h3>Techniciens</h3></div>
-          <label>Filtrer par groupe
+      <div class="team-control-card card">
+        <div class="team-filter-row">
+          <label>Groupe
             <select id="teamGroupFilter"><option value="">Tous les groupes</option></select>
           </label>
-          <div id="teamUsers" class="check-list"></div>
+          <label>Date
+            <input id="teamDate" type="date" />
+          </label>
+          <label>Affichage
+            <select id="teamRange">
+              <option value="1">1 jour</option>
+              <option value="3">3 jours</option>
+              <option value="5" selected>5 jours</option>
+              <option value="7">7 jours</option>
+            </select>
+          </label>
+          <div class="team-quick-actions">
+            <button id="selectAllTeamBtn" class="small-btn" type="button">Tout sélectionner</button>
+            <button id="clearTeamBtn" class="ghost" type="button">Effacer</button>
+          </div>
+        </div>
+        <div id="teamUsers" class="check-list team-user-grid"></div>
+      </div>
+
+      <div class="team-workspace">
+        <article class="card team-planning-card">
+          <div class="card-head">
+            <div>
+              <h3>Calendriers sélectionnés</h3>
+              <p id="teamPlanningCaption" class="muted">Sélectionne un ou plusieurs techniciens.</p>
+            </div>
+            <button id="exportTeamBtn" class="ghost">Exporter Excel</button>
+          </div>
+          <div id="teamSchedule" class="team-schedule">
+            <div class="empty">Sélectionne des techniciens pour afficher leurs plannings.</div>
+          </div>
         </article>
 
-        <article class="card">
+        <article class="card common-slot-card">
           <div class="card-head"><h3>Trouver un créneau commun</h3></div>
           <form id="slotSearchForm" class="stack compact-stack">
             <div class="two-cols">
@@ -97,7 +133,7 @@
                   <option value="120">2 h</option>
                 </select>
               </label>
-              <label>Pas de recherche
+              <label>Pas
                 <select id="slotStep">
                   <option value="15" selected>15 min</option>
                   <option value="30">30 min</option>
@@ -158,6 +194,14 @@
       <label id="ownerWrap">Calendrier de
         <select id="eventOwner"></select>
       </label>
+      <fieldset id="participantsWrap" class="group-fieldset">
+        <legend>Participants</legend>
+        <div class="participant-tools">
+          <input id="participantSearch" type="search" placeholder="Rechercher un participant…" />
+          <button id="clearParticipantsBtn" type="button" class="ghost">Effacer</button>
+        </div>
+        <div id="eventParticipants" class="check-list compact-check-list"></div>
+      </fieldset>
       <label>Titre<input id="eventTitle" maxlength="140" required placeholder="Ex. Intervention, réunion..." /></label>
       <div class="two-cols">
         <label>Début<input id="eventStart" type="datetime-local" required /></label>
@@ -268,6 +312,6 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=032"></script>
+  <script type="module" src="app.js?v=040"></script>
 </body>
 </html>

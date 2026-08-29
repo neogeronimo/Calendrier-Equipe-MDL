@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=032';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=040';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -20,10 +20,13 @@ let currentMainView = 'agenda';
 let adminProfiles = [];
 let deleteTarget = null;
 let archiveReadyForUserId = null;
+let teamEvents = [];
+let teamSelectedIds = new Set();
+let pendingParticipantIds = [];
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.3.2 · ${message}`;
+  if (box) box.textContent = `Version 0.4.0 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -69,6 +72,16 @@ function fmtDate(d, opts={}) { return new Intl.DateTimeFormat('fr-FR', opts).for
 function fmtTime(d) { return new Intl.DateTimeFormat('fr-FR',{hour:'2-digit',minute:'2-digit'}).format(d); }
 function eventColor(ev) { return eventTypes.find(t=>t.id===ev.event_type_id)?.color || '#5b4fd6'; }
 function profileName(p) { return p?.display_name || [p?.first_name,p?.last_name].filter(Boolean).join(' ') || 'Utilisateur'; }
+function groupNamesForUser(userId) {
+  return memberships
+    .filter(m=>m.user_id===userId)
+    .map(m=>groups.find(g=>g.id===m.group_id)?.name)
+    .filter(Boolean);
+}
+function selectedTeamIds() {
+  return [...document.querySelectorAll('.team-user-check:checked')].map(x=>x.value);
+}
+
 function roleCanManageTeam() { return ['planificateur','responsable','administrateur'].includes(currentProfile?.role); }
 function roleCanManageUsers() { return ['responsable','administrateur'].includes(currentProfile?.role); }
 function isAdmin() { return currentProfile?.role === 'administrateur'; }
@@ -218,19 +231,93 @@ function openNewEvent(start=null, ownerId=null) {
   $('eventId').value=''; $('eventDialogTitle').textContent='Nouveau rendez-vous'; $('deleteEventBtn').hidden=true;
   $('eventOwner').value=ownerId||currentProfile.id; $('eventTitle').value=''; $('eventStart').value=toLocalInput(a); $('eventEnd').value=toLocalInput(b); $('eventType').value=''; $('eventStatus').value='confirmed'; $('eventLocation').value=''; $('eventDescription').value=''; $('eventAllDay').checked=false; $('eventFormError').hidden=true; $('eventDialog').showModal();
 }
-function openEventById(id) {
-  const ev=events.find(x=>x.id===id); if(!ev)return;
-  $('eventId').value=ev.id; $('eventDialogTitle').textContent='Modifier le rendez-vous'; $('deleteEventBtn').hidden=false; $('eventOwner').value=ev.owner_id; $('eventTitle').value=ev.title||''; $('eventStart').value=toLocalInput(new Date(ev.starts_at)); $('eventEnd').value=toLocalInput(new Date(ev.ends_at)); $('eventType').value=ev.event_type_id||''; $('eventStatus').value=ev.status||'confirmed'; $('eventLocation').value=ev.location||''; $('eventDescription').value=ev.description||''; $('eventAllDay').checked=!!ev.all_day; $('eventFormError').hidden=true; $('eventDialog').showModal();
+async function openEventById(id) {
+  const ev=events.find(x=>x.id===id) || teamEvents.find(x=>x.id===id);
+  if(!ev)return;
+  const {data: parts}=await supabase.from('event_participants').select('user_id').eq('event_id',id);
+  pendingParticipantIds=(parts||[]).map(x=>x.user_id);
+  $('eventId').value=ev.id;
+  $('eventDialogTitle').textContent='Modifier le rendez-vous';
+  $('deleteEventBtn').hidden=false;
+  $('eventOwner').value=ev.owner_id;
+  $('eventTitle').value=ev.title||'';
+  $('eventStart').value=toLocalInput(new Date(ev.starts_at));
+  $('eventEnd').value=toLocalInput(new Date(ev.ends_at));
+  $('eventType').value=ev.event_type_id||'';
+  $('eventStatus').value=ev.status||'confirmed';
+  $('eventLocation').value=ev.location||'';
+  $('eventDescription').value=ev.description||'';
+  $('eventAllDay').checked=!!ev.all_day;
+  $('participantSearch').value='';
+  renderEventParticipants(pendingParticipantIds);
+  $('eventFormError').hidden=true;
+  $('eventDialog').showModal();
 }
+
 async function saveEvent(e) {
-  e.preventDefault(); $('eventFormError').hidden=true;
-  const id=$('eventId').value||null; const starts=parseLocalInput($('eventStart').value); const ends=parseLocalInput($('eventEnd').value);
-  if(!(starts instanceof Date)||isNaN(starts)||!(ends instanceof Date)||isNaN(ends)||ends<=starts){$('eventFormError').textContent='La date de fin doit être après le début.';$('eventFormError').hidden=false;return;}
-  const payload={owner_id:$('eventOwner').value||currentProfile.id,created_by:currentProfile.id,event_type_id:$('eventType').value||null,title:$('eventTitle').value.trim(),description:$('eventDescription').value.trim()||null,location:$('eventLocation').value.trim()||null,starts_at:starts.toISOString(),ends_at:ends.toISOString(),all_day:$('eventAllDay').checked,status:$('eventStatus').value,visibility:'normal'};
-  const req=id?supabase.from('events').update(payload).eq('id',id):supabase.from('events').insert(payload);
-  const {error}=await req; if(error){$('eventFormError').textContent=error.message;$('eventFormError').hidden=false;return;}
-  $('eventDialog').close(); showToast(id?'Rendez-vous modifié.':'Rendez-vous créé.'); await loadCalendarEvents(); renderCalendar();
+  e.preventDefault();
+  $('eventFormError').hidden=true;
+  const id=$('eventId').value||null;
+  const starts=parseLocalInput($('eventStart').value);
+  const ends=parseLocalInput($('eventEnd').value);
+  if(!(starts instanceof Date)||isNaN(starts)||!(ends instanceof Date)||isNaN(ends)||ends<=starts){
+    $('eventFormError').textContent='La date de fin doit être après le début.';
+    $('eventFormError').hidden=false;
+    return;
+  }
+
+  const ownerId=$('eventOwner').value||currentProfile.id;
+  const participantIds=[...document.querySelectorAll('.event-participant-check:checked')]
+    .map(x=>x.value).filter(id=>id!==ownerId);
+
+  const payload={
+    owner_id:ownerId,
+    created_by:currentProfile.id,
+    event_type_id:$('eventType').value||null,
+    title:$('eventTitle').value.trim(),
+    description:$('eventDescription').value.trim()||null,
+    location:$('eventLocation').value.trim()||null,
+    starts_at:starts.toISOString(),
+    ends_at:ends.toISOString(),
+    all_day:$('eventAllDay').checked,
+    status:$('eventStatus').value,
+    visibility:'normal'
+  };
+
+  let eventId=id;
+  if(id){
+    const {error}=await supabase.from('events').update(payload).eq('id',id);
+    if(error){$('eventFormError').textContent=error.message;$('eventFormError').hidden=false;return;}
+  } else {
+    const {data,error}=await supabase.from('events').insert(payload).select('id').single();
+    if(error){$('eventFormError').textContent=error.message;$('eventFormError').hidden=false;return;}
+    eventId=data.id;
+  }
+
+  const {error:deletePartError}=await supabase.from('event_participants').delete().eq('event_id',eventId);
+  if(deletePartError){
+    $('eventFormError').textContent=`Rendez-vous enregistré, mais participants non mis à jour : ${deletePartError.message}`;
+    $('eventFormError').hidden=false;
+    return;
+  }
+  if(participantIds.length){
+    const {error:partError}=await supabase.from('event_participants').insert(
+      participantIds.map(user_id=>({event_id:eventId,user_id,participation_status:'accepted'}))
+    );
+    if(partError){
+      $('eventFormError').textContent=`Rendez-vous enregistré, mais participants non ajoutés : ${partError.message}`;
+      $('eventFormError').hidden=false;
+      return;
+    }
+  }
+
+  $('eventDialog').close();
+  showToast(id?'Rendez-vous modifié.':'Rendez-vous créé.');
+  await loadCalendarEvents();
+  renderCalendar();
+  if(currentMainView==='team') await refreshTeamSchedule();
 }
+
 async function deleteEvent() {
   const id=$('eventId').value;if(!id)return;if(!confirm('Supprimer définitivement ce rendez-vous ?'))return;
   const {error}=await supabase.from('events').delete().eq('id',id); if(error){$('eventFormError').textContent=error.message;$('eventFormError').hidden=false;return;}
@@ -239,22 +326,222 @@ async function deleteEvent() {
 
 function populateTeamFilters() {
   $('teamGroupFilter').innerHTML='<option value="">Tous les groupes</option>'+groups.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
-  const now=new Date(); $('slotStartDate').value=toDateInput(now); $('slotEndDate').value=toDateInput(addDays(now,7));
+  const now=new Date();
+  $('teamDate').value=toDateInput(now);
+  $('slotStartDate').value=toDateInput(now);
+  $('slotEndDate').value=toDateInput(addDays(now,7));
 }
+
 function renderTeamUsers() {
-  const groupId=$('teamGroupFilter').value; let users=profiles.filter(p=>p.role==='technicien' || p.id===currentProfile.id);
-  if(groupId){const ids=new Set(memberships.filter(m=>m.group_id===groupId).map(m=>m.user_id));users=users.filter(p=>ids.has(p.id));}
-  $('teamUsers').innerHTML=users.length?users.map(p=>{const gs=memberships.filter(m=>m.user_id===p.id).map(m=>groups.find(g=>g.id===m.group_id)?.name).filter(Boolean).join(', ');return `<label class="check-item"><input type="checkbox" value="${p.id}" class="team-user-check"><span><strong>${escapeHtml(profileName(p))}</strong><small>${escapeHtml(gs||p.role)}</small></span></label>`;}).join(''):'<div class="empty">Aucun technicien dans ce filtre.</div>';
+  const groupId=$('teamGroupFilter').value;
+  let users=profiles.filter(p=>p.is_active!==false && p.role==='technicien');
+
+  if(groupId){
+    const ids=new Set(memberships.filter(m=>m.group_id===groupId).map(m=>m.user_id));
+    users=users.filter(p=>ids.has(p.id));
+  }
+
+  $('teamUsers').innerHTML=users.length ? users.map(p=>{
+    const checked=teamSelectedIds.has(p.id);
+    return `<label class="check-item">
+      <input type="checkbox" value="${p.id}" class="team-user-check" ${checked?'checked':''}>
+      <span><strong>${escapeHtml(profileName(p))}</strong><small>${escapeHtml(groupNamesForUser(p.id).join(', ')||'Technicien')}</small></span>
+    </label>`;
+  }).join('') : '<div class="empty">Aucun technicien dans ce filtre.</div>';
+
+  document.querySelectorAll('.team-user-check').forEach(cb=>cb.addEventListener('change',async()=>{
+    if(cb.checked)teamSelectedIds.add(cb.value);else teamSelectedIds.delete(cb.value);
+    await refreshTeamSchedule();
+  }));
 }
+
+async function loadTeamEvents(ids,start,end) {
+  if(!ids.length)return [];
+
+  const ownedRes=await supabase
+    .from('events')
+    .select('id,owner_id,created_by,event_type_id,title,description,location,starts_at,ends_at,all_day,status,visibility')
+    .in('owner_id',ids)
+    .lt('starts_at',end.toISOString())
+    .gt('ends_at',start.toISOString())
+    .order('starts_at');
+
+  if(ownedRes.error) throw ownedRes.error;
+
+  const partsRes=await supabase
+    .from('event_participants')
+    .select('event_id,user_id,participation_status')
+    .in('user_id',ids)
+    .neq('participation_status','declined');
+
+  if(partsRes.error) throw partsRes.error;
+
+  const participantEventIds=[...new Set((partsRes.data||[]).map(x=>x.event_id))];
+  let participantEvents=[];
+  if(participantEventIds.length){
+    const pEventsRes=await supabase
+      .from('events')
+      .select('id,owner_id,created_by,event_type_id,title,description,location,starts_at,ends_at,all_day,status,visibility')
+      .in('id',participantEventIds)
+      .lt('starts_at',end.toISOString())
+      .gt('ends_at',start.toISOString())
+      .order('starts_at');
+    if(pEventsRes.error) throw pEventsRes.error;
+    participantEvents=pEventsRes.data||[];
+  }
+
+  const map=new Map();
+  [...(ownedRes.data||[]),...participantEvents].forEach(ev=>map.set(ev.id,ev));
+  const participationByEvent=new Map();
+  (partsRes.data||[]).forEach(p=>{
+    if(!participationByEvent.has(p.event_id))participationByEvent.set(p.event_id,new Set());
+    participationByEvent.get(p.event_id).add(p.user_id);
+  });
+
+  return [...map.values()].map(ev=>({
+    ...ev,
+    participant_user_ids:[...(participationByEvent.get(ev.id)||new Set())]
+  }));
+}
+
+async function refreshTeamSchedule() {
+  if(currentMainView!=='team')return;
+  const ids=selectedTeamIds();
+  teamSelectedIds=new Set(ids);
+  if(!ids.length){
+    teamEvents=[];
+    $('teamPlanningCaption').textContent='Sélectionne un ou plusieurs techniciens.';
+    $('teamSchedule').innerHTML='<div class="empty">Sélectionne des techniciens pour afficher leurs plannings.</div>';
+    return;
+  }
+
+  const start=new Date(`${$('teamDate').value}T00:00:00`);
+  const days=Math.max(1,Number($('teamRange').value)||5);
+  const end=addDays(start,days);
+
+  $('teamSchedule').innerHTML='<div class="empty">Chargement des calendriers…</div>';
+  try{
+    teamEvents=await loadTeamEvents(ids,start,end);
+    renderTeamSchedule(ids,start,days);
+  }catch(err){
+    $('teamSchedule').innerHTML=`<div class="error">${escapeHtml(err?.message||String(err))}</div>`;
+  }
+}
+
+function renderTeamSchedule(ids,start,days) {
+  const users=ids.map(id=>profiles.find(p=>p.id===id)).filter(Boolean);
+  $('teamPlanningCaption').textContent=`${users.length} technicien${users.length>1?'s':''} · ${fmtDate(start,{day:'2-digit',month:'short'})} → ${fmtDate(addDays(start,days-1),{day:'2-digit',month:'short',year:'numeric'})}`;
+
+  let html=`<div class="team-schedule-table" style="--team-days:${days}">`;
+  html+=`<div class="team-schedule-head"><div>Technicien</div>`;
+  for(let d=0;d<days;d++){
+    const day=addDays(start,d);
+    html+=`<div>${escapeHtml(fmtDate(day,{weekday:'short',day:'2-digit',month:'short'}))}</div>`;
+  }
+  html+='</div>';
+
+  for(const user of users){
+    html+=`<div class="team-person-row"><div class="team-person"><strong>${escapeHtml(profileName(user))}</strong><small>${escapeHtml(groupNamesForUser(user.id).join(', '))}</small></div>`;
+    for(let d=0;d<days;d++){
+      const day=addDays(start,d),dayEnd=addDays(day,1);
+      const list=teamEvents.filter(ev=>{
+        const applies=ev.owner_id===user.id || (ev.participant_user_ids||[]).includes(user.id);
+        return applies && new Date(ev.starts_at)<dayEnd && new Date(ev.ends_at)>day && ev.status!=='cancelled';
+      }).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+      html+=`<div class="team-day-cell" data-team-day="${toDateInput(day)}" data-team-user="${user.id}">`;
+      if(!list.length)html+='<span class="team-empty-day">Libre</span>';
+      for(const ev of list){
+        const participantOnly=ev.owner_id!==user.id;
+        html+=`<button class="team-event-chip ${participantOnly?'participant-event':''}" data-team-event="${ev.id}" style="border-left-color:${escapeHtml(eventColor(ev))}">
+          <strong>${escapeHtml(ev.title)}</strong>
+          <span>${ev.all_day?'Journée entière':`${fmtTime(new Date(ev.starts_at))}–${fmtTime(new Date(ev.ends_at))}`}${participantOnly?' · participant':''}</span>
+        </button>`;
+      }
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+  html+='</div>';
+  $('teamSchedule').innerHTML=html;
+
+  $('teamSchedule').querySelectorAll('[data-team-event]').forEach(btn=>btn.addEventListener('click',()=>openEventById(btn.dataset.teamEvent)));
+  $('teamSchedule').querySelectorAll('[data-team-day]').forEach(cell=>cell.addEventListener('dblclick',()=>{
+    const a=new Date(`${cell.dataset.teamDay}T09:00:00`);
+    openNewEvent(a,cell.dataset.teamUser);
+  }));
+}
+
 async function searchSlots(e) {
-  e.preventDefault(); const ids=[...document.querySelectorAll('.team-user-check:checked')].map(x=>x.value); if(!ids.length){showToast('Sélectionne au moins un technicien.');return;}
-  const start=new Date(`${$('slotStartDate').value}T00:00:00`), end=new Date(`${$('slotEndDate').value}T23:59:59`); const duration=Number($('slotDuration').value), step=Number($('slotStep').value);
+  e.preventDefault();
+  const ids=selectedTeamIds();
+  if(!ids.length){showToast('Sélectionne au moins un technicien.');return;}
+  const start=new Date(`${$('slotStartDate').value}T00:00:00`);
+  const end=new Date(`${$('slotEndDate').value}T23:59:59`);
+  const duration=Number($('slotDuration').value), step=Number($('slotStep').value);
   $('slotResults').innerHTML='<div class="empty">Recherche en cours…</div>';
-  const {data,error}=await supabase.rpc('find_common_slots',{target_user_ids:ids,range_start:start.toISOString(),range_end:end.toISOString(),duration_minutes:duration,slot_step_minutes:step,max_results:20});
+
+  const {data,error}=await supabase.rpc('find_common_slots',{
+    target_user_ids:ids,
+    range_start:start.toISOString(),
+    range_end:end.toISOString(),
+    duration_minutes:duration,
+    slot_step_minutes:step,
+    max_results:20
+  });
+
   if(error){$('slotResults').innerHTML=`<div class="error">${escapeHtml(error.message)}</div>`;return;}
   if(!data?.length){$('slotResults').innerHTML='<div class="empty">Aucun créneau commun trouvé sur cette période.</div>';return;}
-  $('slotResults').innerHTML=data.map((s,i)=>{const a=new Date(s.slot_start),b=new Date(s.slot_end);return `<div class="slot-card"><div><strong>${fmtDate(a,{weekday:'long',day:'2-digit',month:'long'})}</strong><span class="muted">${fmtTime(a)} → ${fmtTime(b)}</span></div><button class="small-btn" data-slot-index="${i}">Créer</button></div>`;}).join('');
-  $('slotResults').querySelectorAll('[data-slot-index]').forEach(btn=>btn.addEventListener('click',()=>{const s=data[Number(btn.dataset.slotIndex)];const a=new Date(s.slot_start);openNewEvent(a);$('eventEnd').value=toLocalInput(new Date(s.slot_end));}));
+
+  $('slotResults').innerHTML=data.map((s,i)=>{
+    const a=new Date(s.slot_start),b=new Date(s.slot_end);
+    return `<div class="slot-card"><div><strong>${fmtDate(a,{weekday:'long',day:'2-digit',month:'long'})}</strong><span class="muted">${fmtTime(a)} → ${fmtTime(b)}</span></div><button class="small-btn" data-slot-index="${i}">Créer une réunion</button></div>`;
+  }).join('');
+
+  $('slotResults').querySelectorAll('[data-slot-index]').forEach(btn=>btn.addEventListener('click',()=>{
+    const s=data[Number(btn.dataset.slotIndex)];
+    const a=new Date(s.slot_start);
+    // Meeting owned by the planner/manager, selected technicians as participants.
+    openNewEvent(a,currentProfile.id,ids);
+    $('eventEnd').value=toLocalInput(new Date(s.slot_end));
+    $('eventTitle').value='Réunion';
+  }));
+}
+
+function exportTeamPlanningExcel() {
+  const ids=selectedTeamIds();
+  if(!ids.length){showToast('Sélectionne au moins un technicien.');return;}
+  const start=new Date(`${$('teamDate').value}T00:00:00`);
+  const days=Math.max(1,Number($('teamRange').value)||5);
+  const end=addDays(start,days);
+
+  const rows=[];
+  for(const userId of ids){
+    const user=profiles.find(p=>p.id===userId);
+    const userEvents=teamEvents.filter(ev=>
+      (ev.owner_id===userId || (ev.participant_user_ids||[]).includes(userId)) &&
+      new Date(ev.starts_at)<end && new Date(ev.ends_at)>start
+    );
+    for(const ev of userEvents){
+      rows.push({
+        'Technicien':profileName(user),
+        'Groupes':groupNamesForUser(userId).join(', '),
+        'Début':fmtDate(new Date(ev.starts_at),{day:'2-digit',month:'2-digit',year:'numeric'})+' '+fmtTime(new Date(ev.starts_at)),
+        'Fin':fmtDate(new Date(ev.ends_at),{day:'2-digit',month:'2-digit',year:'numeric'})+' '+fmtTime(new Date(ev.ends_at)),
+        'Titre':ev.title||'',
+        'Type':eventTypes.find(t=>t.id===ev.event_type_id)?.name||'',
+        'Lieu':ev.location||'',
+        'Statut':ev.status||'',
+        'Participation':ev.owner_id===userId?'Propriétaire':'Participant'
+      });
+    }
+  }
+
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{'Information':'Aucun événement sur la période.'}]);
+  ws['!cols']=[{wch:26},{wch:30},{wch:20},{wch:20},{wch:34},{wch:20},{wch:28},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws,'Planning équipe');
+  XLSX.writeFile(wb,`Planning-Equipe-${toDateInput(start)}-${toDateInput(addDays(end,-1))}.xlsx`,{compression:true});
+  showToast('Export Excel généré.');
 }
 
 async function loadAdmin() {
@@ -547,7 +834,18 @@ $('prevBtn').addEventListener('click',async()=>{cursorDate=calendarView==='month
 $('nextBtn').addEventListener('click',async()=>{cursorDate=calendarView==='month'?new Date(cursorDate.getFullYear(),cursorDate.getMonth()+1,1):calendarView==='week'?addDays(cursorDate,7):addDays(cursorDate,30);await loadCalendarEvents();renderCalendar();});
 $('todayBtn').addEventListener('click',async()=>{cursorDate=startOfDay(new Date());await loadCalendarEvents();renderCalendar();});
 document.querySelectorAll('.view-btn').forEach(b=>b.addEventListener('click',async()=>{calendarView=b.dataset.calView;await loadCalendarEvents();renderCalendar();}));
-$('teamGroupFilter').addEventListener('change',renderTeamUsers);$('refreshTeamBtn').addEventListener('click',async()=>{await loadReferenceData();renderTeamUsers();});$('slotSearchForm').addEventListener('submit',searchSlots);
+$('teamGroupFilter').addEventListener('change',async()=>{teamSelectedIds.clear();renderTeamUsers();await refreshTeamSchedule();});
+$('refreshTeamBtn').addEventListener('click',async()=>{await loadReferenceData();renderTeamUsers();await refreshTeamSchedule();});
+$('teamTodayBtn').addEventListener('click',async()=>{$('teamDate').value=toDateInput(new Date());await refreshTeamSchedule();});
+$('teamDate').addEventListener('change',refreshTeamSchedule);
+$('teamRange').addEventListener('change',refreshTeamSchedule);
+$('selectAllTeamBtn').addEventListener('click',async()=>{document.querySelectorAll('.team-user-check').forEach(cb=>{cb.checked=true;teamSelectedIds.add(cb.value);});await refreshTeamSchedule();});
+$('clearTeamBtn').addEventListener('click',async()=>{document.querySelectorAll('.team-user-check').forEach(cb=>cb.checked=false);teamSelectedIds.clear();await refreshTeamSchedule();});
+$('exportTeamBtn').addEventListener('click',exportTeamPlanningExcel);
+$('slotSearchForm').addEventListener('submit',searchSlots);
+$('participantSearch').addEventListener('input',()=>renderEventParticipants([...document.querySelectorAll('.event-participant-check:checked')].map(x=>x.value)));
+$('clearParticipantsBtn').addEventListener('click',()=>{document.querySelectorAll('.event-participant-check').forEach(x=>x.checked=false);});
+$('eventOwner').addEventListener('change',()=>renderEventParticipants([...document.querySelectorAll('.event-participant-check:checked')].map(x=>x.value)));
 $('refreshAdminBtn').addEventListener('click',async()=>{await loadReferenceData();await loadAdmin();});
 
 $('addUserBtn').addEventListener('click',openNewUser);
@@ -577,6 +875,6 @@ $('groupForm').addEventListener('submit',async e=>{
   await loadAdmin();
   showToast('Groupe créé.');
 });
-document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','adminPanel'].forEach(id=>$(id).hidden=true);currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team')renderTeamUsers();if(currentMainView==='admin')await loadAdmin();}));
+document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','adminPanel'].forEach(id=>$(id).hidden=true);currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team'){renderTeamUsers();await refreshTeamSchedule();}if(currentMainView==='admin')await loadAdmin();}));
 
 bootstrap();

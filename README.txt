@@ -1,29 +1,42 @@
-CALENDRIER ÉQUIPE MDL v0.3.6 — CORRECTIF DÉFINITIF GESTION UTILISATEURS
+CALENDRIER ÉQUIPE MDL v0.4.0
 
-Le message "permission denied for table profiles" montre que l'accès Data API
-avec le client secret n'est pas la bonne voie dans notre configuration.
+OBJECTIF DE CETTE VERSION
+Accélérer le passage du prototype à un outil réellement utilisable par les planificateurs.
 
-La v0.3.6 sépare donc complètement les responsabilités :
-- JWT utilisateur + RPC SECURITY DEFINER pour TOUTES les opérations BDD ;
-- clé secrète uniquement pour Supabase Auth admin (création/suppression du compte).
+NOUVEAUTÉS
+- Planning équipe multi-techniciens.
+- Filtre par groupe.
+- Affichage 1 / 3 / 5 / 7 jours.
+- Sélection de plusieurs techniciens.
+- Événements où le technicien est propriétaire OU participant.
+- Double-clic dans une case vide du planning équipe pour préparer un rendez-vous.
+- Recherche de créneaux communs conservée et améliorée.
+- Un créneau commun peut créer directement une réunion avec tous les techniciens sélectionnés comme participants.
+- Gestion des participants dans la fenêtre Rendez-vous.
+- Export Excel du planning équipe.
+- Gestion utilisateurs v0.3.6 conservée, avec création/suppression sécurisées.
+- Interface responsive PC / téléphone.
 
-INSTALLATION
+INSTALLATION SI TA v0.3.6 FONCTIONNE DÉJÀ
+1. AUCUN SQL supplémentaire.
+2. AUCUNE modification de l'Edge Function admin-users.
+3. Sur GitHub, remplacer :
+   - index.html
+   - app.js
+   - styles.css
+4. Attendre GitHub Pages puis Ctrl+F5.
 
-1) Supabase > SQL Editor
-   Exécuter SQL-v0.3.6-UTILISATEURS.sql
-   Résultat attendu : Success.
+IMPORTANT
+Les fichiers SQL v0.3.6 et Edge Function v0.3.6 sont inclus dans le pack uniquement
+pour garder une version complète et autonome du projet. Si ta gestion utilisateurs
+fonctionne déjà, ne les rejoue pas.
 
-2) Supabase > Edge Functions > admin-users > Code
-   Remplacer TOUT le code par EDGE-FUNCTION-admin-users-v0.3.6.txt
-   Puis Deploy.
-
-3) Settings de admin-users
-   Verify JWT with legacy secret = OFF
-   Save changes.
-
-4) Aucun changement GitHub.
-   Retester + Nouvel utilisateur.
-
-Cette version ne fait plus aucun SELECT/UPDATE/DELETE direct sur public.profiles
-avec la clé secrète. La clé secrète ne sert qu'à auth.admin.createUser() et
-auth.admin.deleteUser().
+TEST RAPIDE
+- Équipe > choisir un groupe.
+- Sélectionner 2 techniciens.
+- Vérifier que leurs rendez-vous apparaissent.
+- Rechercher un créneau commun.
+- Cliquer "Créer une réunion".
+- Vérifier que les techniciens sont précochés comme participants.
+- Enregistrer.
+- Vérifier que la réunion apparaît dans le planning des participants.
