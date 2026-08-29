@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=101';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=102';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -32,13 +32,13 @@ let deferredInstallPrompt=null;
 let teamAbsenceOnly=false;
 let notificationTimer=null;
 let schedulingSettings = null;
-const APP_VERSION='1.0.1';
+const APP_VERSION='1.0.2';
 let lastSuccessfulSync=null;
 let diagnosticsText='';
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 1.0.1 · ${message}`;
+  if (box) box.textContent = `Version 1.0.2 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -1855,7 +1855,7 @@ function installPwa(){
   if('serviceWorker' in navigator){
     window.addEventListener('load',async()=>{
       try{
-        const reg=await navigator.serviceWorker.register('./sw.js?v=101');
+        const reg=await navigator.serviceWorker.register('./sw.js?v=102');
         await reg.update();
         if(reg.waiting)showToast('Une mise à jour est prête. Recharge l’application.',5000);
       }catch(err){console.warn('Service Worker',err)}
@@ -1971,11 +1971,24 @@ function startNotificationLoop(){
 }
 async function loadNotificationSettings(){
   const p=notificationPrefs();
-  $('notificationsEnabled').checked=!!p.enabled;
-  $('notificationReminderMinutes').value=String(p.minutes||30);
-  $('notifyMeetingChanges').checked=p.changes!==false;
-  const perm=('Notification' in window)?Notification.permission:'unsupported';
-  $('notificationSettingsStatus').textContent=`Autorisation : ${perm}${/Android/i.test(navigator.userAgent)?' · Android détecté':''}`;
+  const permission=('Notification' in window)?Notification.permission:'unsupported';
+
+  // Android/PWA : l'autorisation système est la référence la plus fiable.
+  // Si Android a déjà accordé les notifications, on restaure automatiquement
+  // l'activation même si le stockage local a été purgé entre deux lancements.
+  const enabled=(p.enabled===true) || (p.enabled===undefined && permission==='granted') || (permission==='granted' && p.enabled!==false);
+
+  const normalized={
+    enabled,
+    minutes:Number(p.minutes||30),
+    changes:p.changes!==false
+  };
+  saveNotificationPrefs(normalized);
+
+  $('notificationsEnabled').checked=normalized.enabled;
+  $('notificationReminderMinutes').value=String(normalized.minutes);
+  $('notifyMeetingChanges').checked=normalized.changes;
+  $('notificationSettingsStatus').textContent=`Autorisation : ${permission}${/Android/i.test(navigator.userAgent)?' · Android détecté':''}${normalized.enabled?' · rappels activés':''}`;
   renderPwaStatus();
 }
 async function saveNotificationSettings(){
@@ -1984,9 +1997,15 @@ async function saveNotificationSettings(){
     const permission=await Notification.requestPermission();
     if(permission!=='granted')enabled=false;
   }
-  saveNotificationPrefs({enabled,minutes:Number($('notificationReminderMinutes').value),changes:$('notifyMeetingChanges').checked});
+  const prefs={
+    enabled,
+    minutes:Number($('notificationReminderMinutes').value),
+    changes:$('notifyMeetingChanges').checked,
+    saved_at:new Date().toISOString()
+  };
+  saveNotificationPrefs(prefs);
   $('notificationsEnabled').checked=enabled;
-  $('notificationSettingsStatus').textContent=enabled?'Notifications activées.':'Notifications désactivées.';
+  $('notificationSettingsStatus').textContent=enabled?'Notifications activées et mémorisées.':'Notifications désactivées et mémorisées.';
   startNotificationLoop();
 }
 async function testNotification(){
@@ -2135,6 +2154,18 @@ $('markNotificationsReadBtn').addEventListener('click',()=>{const set=new Set(lo
 $('drawerSettingsBtn').addEventListener('click',()=>{$('notificationDrawer').hidden=true;setMainView('settings');});
 $('openNotificationSettingsBtn').addEventListener('click',()=>setMainView('settings'));
 $('saveNotificationSettingsBtn').addEventListener('click',saveNotificationSettings);
+['notificationsEnabled','notificationReminderMinutes','notifyMeetingChanges'].forEach(id=>{
+  $(id).addEventListener('change',()=>{
+    const current=notificationPrefs();
+    saveNotificationPrefs({
+      ...current,
+      enabled:$('notificationsEnabled').checked,
+      minutes:Number($('notificationReminderMinutes').value),
+      changes:$('notifyMeetingChanges').checked,
+      saved_at:new Date().toISOString()
+    });
+  });
+});
 $('testNotificationBtn').addEventListener('click',testNotification);
 $('installPwaBtn').addEventListener('click',triggerInstallPwa);
 $('teamOnlyAbsencesBtn').addEventListener('click',()=>{teamAbsenceOnly=!teamAbsenceOnly;$('teamOnlyAbsencesBtn').classList.toggle('active',teamAbsenceOnly);$('teamFilterSummary').textContent=teamAbsenceOnly?'Filtre : absences uniquement':'';refreshTeamSchedule();});
