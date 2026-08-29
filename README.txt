@@ -1,31 +1,24 @@
-CALENDRIER ÉQUIPE MDL v0.7.1 — CORRECTIF DASHBOARD
+CALENDRIER ÉQUIPE MDL v0.7.2 — CORRECTIF MENU LATÉRAL
 
-Correction de l'erreur de connexion :
-Cannot set properties of null (setting 'hidden')
+Problème corrigé :
+Le nouveau menu de gauche pouvait s'afficher mais ne pas changer de page.
 
-CAUSE
-La refonte v0.7.0 avait retiré de l'HTML certains anciens éléments attendus par
-le JavaScript, notamment teamTab/adminTab, et avait créé des panneaux Agenda,
-Équipe, Réglages et Administration vides.
-
-CORRECTIONS
-- références teamTab/adminTab rendues compatibles avec la nouvelle sidebar ;
-- restauration complète des panneaux fonctionnels de la v0.6.0 ;
-- Agenda conservé ;
-- Planning équipe conservé ;
-- Recherche de disponibilités conservée ;
-- Réglages conservés ;
-- Administration utilisateurs/groupes/types/horaires conservée ;
-- nouveau Dashboard v0.7 conservé ;
-- initialisation du dashboard sécurisée contre les doubles branchements.
+Correction :
+- navigation pilotée par un écouteur global robuste ;
+- fonctionne même après reconnexion ou reconstruction de l'interface ;
+- chaque clic sur Tableau de bord, Agenda, Planning équipe, Groupes,
+  Techniciens, Réglages ou Administration ouvre explicitement le panneau attendu ;
+- contrôle des droits conservé pour Équipe et Administration ;
+- bouton Créer un rendez-vous et exports latéraux rendus indépendants ;
+- erreurs de chargement affichées au lieu de bloquer silencieusement.
 
 INSTALLATION
 Aucun SQL.
 Aucune Edge Function.
 
-Remplacer sur GitHub :
+Sur GitHub remplacer :
 - index.html
 - app.js
 
-styles.css de la v0.7.0 peut rester, mais le ZIP contient l'ensemble complet.
-Puis Ctrl + F5.
+Le styles.css de v0.7.1 peut rester.
+Puis attendre GitHub Pages et faire Ctrl+F5.

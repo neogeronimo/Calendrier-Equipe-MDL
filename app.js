@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=071';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=072';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -31,7 +31,7 @@ let schedulingSettings = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.7.1 · ${message}`;
+  if (box) box.textContent = `Version 0.7.2 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -1493,28 +1493,60 @@ function updateHeaderIdentity(){
   document.querySelectorAll('.admin-only').forEach(el=>el.hidden=!roleCanManageUsers());
   if($('adminSideTitle')) $('adminSideTitle').hidden=!roleCanManageUsers();
 }
-function setMainView(view){
+async function setMainView(view){
+  const valid=['dashboard','agenda','team','groups','technicians','settings','admin'];
+  if(!valid.includes(view)) return;
+
+  if(view==='admin' && !roleCanManageUsers()){
+    showToast('Accès administration non autorisé.');
+    return;
+  }
+  if((view==='team') && !roleCanManageTeam()){
+    showToast('Accès au planning équipe non autorisé.');
+    return;
+  }
+
   currentMainView=view;
-  const ids=['dashboard','agenda','team','groups','technicians','settings','admin'];
-  ids.forEach(v=>{const el=$(v+'Panel');if(el)el.hidden=v!==view});
-  document.querySelectorAll('.side-link[data-view],.mobile-link[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
-  if(view==='dashboard'){refreshDashboardPlanning();renderDashboardGroups();renderDashboardParticipants();}
-  if(view==='agenda'){loadCalendarEvents().then(renderCalendar);}
-  if(view==='team'){renderTeamUsers();refreshTeamSchedule();}
-  if(view==='groups')renderGroupsPage();
-  if(view==='technicians')renderTechniciansPage();
-  if(view==='settings')loadMySettings();
-  if(view==='admin')loadAdmin();
+
+  valid.forEach(v=>{
+    const el=$(v+'Panel');
+    if(el) el.hidden=(v!==view);
+  });
+
+  document.querySelectorAll('.side-link[data-view],.mobile-link[data-view]').forEach(b=>{
+    b.classList.toggle('active',b.dataset.view===view);
+  });
+
+  try{
+    if(view==='dashboard'){
+      await refreshDashboardPlanning();
+      renderDashboardGroups();
+      renderDashboardParticipants();
+    } else if(view==='agenda'){
+      await loadCalendarEvents();
+      renderCalendar();
+    } else if(view==='team'){
+      renderTeamUsers();
+      await refreshTeamSchedule();
+    } else if(view==='groups'){
+      renderGroupsPage();
+    } else if(view==='technicians'){
+      renderTechniciansPage();
+    } else if(view==='settings'){
+      await loadMySettings();
+    } else if(view==='admin'){
+      await loadAdmin();
+    }
+  }catch(err){
+    console.error('Navigation',view,err);
+    showToast(`Ouverture impossible : ${err?.message||err}`,5000);
+  }
 }
+
 function initDashboardBindings(){
   if(window.__dashboardBindingsReady)return;
   window.__dashboardBindingsReady=true;
   const today=new Date();$('dashSlotStart').value=toDateInput(today);$('dashSlotEnd').value=toDateInput(addDays(today,7));
-  document.querySelectorAll('.side-link[data-view],.mobile-link[data-view]').forEach(b=>b.addEventListener('click',()=>setMainView(b.dataset.view)));
-  $('quickCreateEventBtn').addEventListener('click',()=>openNewEvent(new Date()));
-  $('sideExportXlsx').addEventListener('click',exportTeamPlanningExcel);
-  $('sideExportCsv').addEventListener('click',exportTeamCsv);
-  $('sideExportIcs').addEventListener('click',exportTeamIcs);
   $('dashPrevBtn').addEventListener('click',()=>{dashboardCursor=addDays(dashboardCursor,-dashboardRangeDays);refreshDashboardPlanning()});
   $('dashNextBtn').addEventListener('click',()=>{dashboardCursor=addDays(dashboardCursor,dashboardRangeDays);refreshDashboardPlanning()});
   $('dashDayBtn').addEventListener('click',()=>{dashboardRangeDays=1;document.querySelectorAll('#dashWeekBtn,#dashDayBtn,#dashMonthBtn').forEach(x=>x.classList.remove('active'));$('dashDayBtn').classList.add('active');refreshDashboardPlanning()});
@@ -1527,6 +1559,33 @@ function initDashboardBindings(){
   $('globalSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){setMainView('agenda');$('agendaSearch').value=e.target.value;renderCalendar()}});
   document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('globalSearch').focus()}});
 }
+
+
+function installNavigationDelegation(){
+  if(window.__mdlNavDelegationReady) return;
+  window.__mdlNavDelegationReady=true;
+
+  document.addEventListener('click',async e=>{
+    const nav=e.target.closest('.side-link[data-view], .mobile-link[data-view]');
+    if(!nav) return;
+    e.preventDefault();
+    e.stopPropagation();
+    await setMainView(nav.dataset.view);
+  });
+}
+
+installNavigationDelegation();
+
+document.addEventListener('click',e=>{
+  const btn=e.target.closest('#quickCreateEventBtn,#sideExportXlsx,#sideExportCsv,#sideExportIcs');
+  if(!btn)return;
+  e.preventDefault();
+  if(btn.id==='quickCreateEventBtn') openNewEvent(new Date());
+  if(btn.id==='sideExportXlsx') exportTeamPlanningExcel();
+  if(btn.id==='sideExportCsv') exportTeamCsv();
+  if(btn.id==='sideExportIcs') exportTeamIcs();
+});
+
 
 async function bootstrap() {
   try { setStatus('vérification de la session…'); const {data:{session},error}=await supabase.auth.getSession(); if(error)throw error;if(!session){showLogin();setStatus('aucune session · veuillez vous connecter.');return;}await enterApplication(session); }
