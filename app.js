@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=072';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=080';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -31,7 +31,7 @@ let schedulingSettings = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.7.2 · ${message}`;
+  if (box) box.textContent = `Version 0.8.0 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -536,6 +536,8 @@ function populateTeamFilters() {
   $('slotStartDate').value=toDateInput(now);
   $('slotEndDate').value=toDateInput(addDays(now,7));
   renderGroupOverview();
+
+  if($('teamEventTypeFilter')) $('teamEventTypeFilter').innerHTML='<option value="">Tous les types</option>'+eventTypes.map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
 }
 
 function renderTeamUsers() {
@@ -693,6 +695,10 @@ function renderTeamSchedule(ids,start,days) {
     for(let d=0;d<days;d++){
       const day=addDays(start,d),dayEnd=addDays(day,1);
       const list=teamEvents.filter(ev=>{
+        const typeFilter=$('teamEventTypeFilter')?.value||'';
+        const statusFilter=$('teamEventStatusFilter')?.value||'';
+        if(typeFilter && ev.event_type_id!==typeFilter)return false;
+        if(statusFilter && ev.status!==statusFilter)return false;
         const applies=ev.owner_id===user.id || (ev.participant_user_ids||[]).includes(user.id);
         return applies && new Date(ev.starts_at)<dayEnd && new Date(ev.ends_at)>day && ev.status!=='cancelled';
       }).sort((a,b)=>{
@@ -1587,6 +1593,106 @@ document.addEventListener('click',e=>{
 });
 
 
+
+const WEEK_DAYS=[
+  [1,'Lundi'],[2,'Mardi'],[3,'Mercredi'],[4,'Jeudi'],[5,'Vendredi'],[6,'Samedi'],[7,'Dimanche']
+];
+
+function absenceTypeOptions(){
+  const preferred=eventTypes.filter(t=>/absence|congé|conge|repos|rtt/i.test(`${t.name} ${t.description||''}`));
+  const list=preferred.length?preferred:eventTypes;
+  return list.map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+}
+function openAbsenceDialog(){
+  const today=toDateInput(new Date());
+  $('absenceStart').value=today;$('absenceEnd').value=today;
+  $('absenceTitle').value='Absence';$('absenceDescription').value='';$('absenceError').hidden=true;
+  const owners=roleCanManageTeam()?profiles.filter(p=>p.is_active!==false):[currentProfile];
+  $('absenceOwner').innerHTML=owners.map(p=>`<option value="${p.id}">${escapeHtml(profileName(p))}</option>`).join('');
+  $('absenceOwner').value=currentProfile.id;
+  $('absenceOwnerWrap').hidden=!roleCanManageTeam();
+  $('absenceType').innerHTML=absenceTypeOptions();
+  const preferred=eventTypes.find(t=>/absence|congé|conge/i.test(t.name));
+  if(preferred)$('absenceType').value=preferred.id;
+  $('absenceDialog').showModal();
+}
+async function saveAbsence(e){
+  e.preventDefault();
+  const start=$('absenceStart').value,end=$('absenceEnd').value;
+  if(!start||!end||end<start){$('absenceError').textContent='La date de fin doit être égale ou postérieure au début.';$('absenceError').hidden=false;return}
+  const a=new Date(`${start}T00:00:00`), b=addDays(new Date(`${end}T00:00:00`),1);
+  const payload={
+    owner_id:$('absenceOwner').value||currentProfile.id,
+    created_by:currentProfile.id,
+    event_type_id:$('absenceType').value||null,
+    title:$('absenceTitle').value.trim()||'Absence',
+    description:$('absenceDescription').value.trim()||null,
+    location:null,starts_at:a.toISOString(),ends_at:b.toISOString(),
+    all_day:true,status:'confirmed',visibility:'normal'
+  };
+  const {error}=await supabase.from('events').insert(payload);
+  if(error){$('absenceError').textContent=error.message;$('absenceError').hidden=false;return}
+  $('absenceDialog').close();showToast('Absence enregistrée.');
+  await loadCalendarEvents();renderCalendar();
+  if(currentMainView==='dashboard')await refreshDashboardPlanning();
+  if(currentMainView==='team')await refreshTeamSchedule();
+}
+
+function renderWorkingHours(rows=[]){
+  const byDay=new Map((rows||[]).map(r=>[Number(r.day_of_week),r]));
+  $('workingHoursEditor').innerHTML=WEEK_DAYS.map(([day,label])=>{
+    const r=byDay.get(day);
+    const active=!!r?.is_active;
+    return `<div class="wh-row" data-day="${day}">
+      <span class="wh-day">${label}</span>
+      <label class="wh-active"><input type="checkbox" class="wh-enabled" ${active?'checked':''}> Actif</label>
+      <input class="wh-start" type="time" value="${String(r?.start_time||'08:00').slice(0,5)}" ${active?'':'disabled'}>
+      <input class="wh-end" type="time" value="${String(r?.end_time||'18:00').slice(0,5)}" ${active?'':'disabled'}>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('.wh-enabled').forEach(cb=>cb.addEventListener('change',()=>{
+    const row=cb.closest('.wh-row');row.querySelector('.wh-start').disabled=!cb.checked;row.querySelector('.wh-end').disabled=!cb.checked;
+  }));
+}
+async function loadWorkingHours(){
+  const target=$('workingHoursUser')?.value||currentProfile.id;
+  const {data,error}=await supabase.from('working_hours').select('*').eq('user_id',target).order('day_of_week');
+  if(error){$('workingHoursStatus').textContent=error.message;return}
+  renderWorkingHours(data||[]);
+}
+async function prepareWorkingHoursSettings(){
+  const isAdmin=currentProfile.role==='administrateur';
+  $('workingHoursUserWrap').hidden=!isAdmin;
+  if(isAdmin){
+    $('workingHoursUser').innerHTML=profiles.filter(p=>p.is_active!==false).map(p=>`<option value="${p.id}">${escapeHtml(profileName(p))}</option>`).join('');
+    if(!$('workingHoursUser').value)$('workingHoursUser').value=currentProfile.id;
+  }
+  await loadWorkingHours();
+}
+async function saveWorkingHours(){
+  const target=$('workingHoursUser')?.value||currentProfile.id;
+  const rows=[...document.querySelectorAll('.wh-row')];
+  for(const row of rows){
+    const day=Number(row.dataset.day),enabled=row.querySelector('.wh-enabled').checked;
+    const start=row.querySelector('.wh-start').value,end=row.querySelector('.wh-end').value;
+    const {error:delErr}=await supabase.from('working_hours').delete().eq('user_id',target).eq('day_of_week',day);
+    if(delErr){$('workingHoursStatus').textContent=delErr.message;return}
+    if(enabled){
+      if(!start||!end||end<=start){$('workingHoursStatus').textContent=`Horaire invalide pour ${WEEK_DAYS.find(x=>x[0]===day)[1]}.`;return}
+      const {error}=await supabase.from('working_hours').insert({user_id:target,day_of_week:day,start_time:start,end_time:end,is_active:true});
+      if(error){$('workingHoursStatus').textContent=error.message;return}
+    }
+  }
+  $('workingHoursStatus').textContent='Horaires enregistrés.';
+  showToast('Horaires individuels enregistrés.');
+}
+function installPwa(){
+  if('serviceWorker' in navigator){
+    window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=080').catch(console.warn));
+  }
+}
+installPwa();
+
 async function bootstrap() {
   try { setStatus('vérification de la session…'); const {data:{session},error}=await supabase.auth.getSession(); if(error)throw error;if(!session){showLogin();setStatus('aucune session · veuillez vous connecter.');return;}await enterApplication(session); }
   catch(e){console.error(e);showLogin();showLoginError(e?.message||String(e));setStatus('échec au démarrage.');}
@@ -1675,6 +1781,19 @@ $('groupForm').addEventListener('submit',async e=>{
   await loadAdmin();
   showToast('Groupe créé.');
 });
-document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','settingsPanel','adminPanel'].forEach(id=>{const el=$(id);if(el)el.hidden=true});currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team'){renderTeamUsers();await refreshTeamSchedule();}if(currentMainView==='settings')await loadMySettings();if(currentMainView==='admin')await loadAdmin();}));
+document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',async()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');['agendaPanel','teamPanel','settingsPanel','adminPanel'].forEach(id=>{const el=$(id);if(el)el.hidden=true});currentMainView=tab.dataset.view;$(currentMainView+'Panel').hidden=false;if(currentMainView==='team'){renderTeamUsers();await refreshTeamSchedule();}if(currentMainView==='settings'){await loadMySettings();await prepareWorkingHoursSettings();}if(currentMainView==='admin')await loadAdmin();}));
+
+
+$('quickAbsenceBtn').addEventListener('click',openAbsenceDialog);
+$('mobileCreateEventBtn').addEventListener('click',()=>openNewEvent(new Date()));
+$('mobileAbsenceBtn').addEventListener('click',openAbsenceDialog);
+$('mobileSearchSlotsBtn').addEventListener('click',()=>setMainView('team'));
+$('absenceForm').addEventListener('submit',saveAbsence);
+$('closeAbsenceDialogBtn').addEventListener('click',()=>$('absenceDialog').close());
+$('cancelAbsenceBtn').addEventListener('click',()=>$('absenceDialog').close());
+$('saveWorkingHoursBtn').addEventListener('click',saveWorkingHours);
+$('workingHoursUser').addEventListener('change',loadWorkingHours);
+if($('teamEventTypeFilter')) $('teamEventTypeFilter').addEventListener('change',refreshTeamSchedule);
+if($('teamEventStatusFilter')) $('teamEventStatusFilter').addEventListener('change',refreshTeamSchedule);
 
 bootstrap();

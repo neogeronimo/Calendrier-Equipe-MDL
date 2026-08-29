@@ -832,3 +832,40 @@ button,input,select,textarea{font:inherit}
 @media(max-width:560px){
   .metric-grid{grid-template-columns:1fr 1fr}.metric-card{padding:10px}.metric-card strong{font-size:18px}.metric-icon{width:36px;height:36px}.premium-card{padding:10px}.hero-actions .date-pill{order:10;width:100%}.common-slot-cards{grid-template-columns:1fr}.user-card{display:none}
 }
+
+
+/* v0.8.0 — Planning Pro + Mobile/PWA */
+.mobile-quick-actions{display:none}
+.working-hours-card{grid-column:1/-1}
+.working-hours-editor{display:grid;gap:8px;margin:10px 0 14px}
+.wh-row{display:grid;grid-template-columns:150px 110px 1fr 1fr;gap:10px;align-items:center;padding:9px 10px;border:1px solid var(--line,var(--border));border-radius:12px;background:#fbfcff}
+.wh-day{font-weight:800}
+.wh-active{display:flex;align-items:center;gap:7px;font-size:.85rem}
+.wh-row input[type="time"]{min-height:38px!important}
+#absenceDialog{width:min(560px,calc(100vw - 24px))}
+.mobile-action{border:1px solid var(--line);background:#fff;border-radius:14px;padding:12px;display:grid;place-items:center;gap:4px;color:var(--text);box-shadow:0 3px 12px rgba(33,42,74,.04)}
+.mobile-action span{font-size:20px;color:var(--purple,#5b45e8)}
+.mobile-action strong{font-size:11px}
+.mobile-action.primary span{color:#fff}
+@media(max-width:860px){
+  .mobile-quick-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+  .metric-grid{overflow-x:auto;display:flex;scroll-snap-type:x mandatory;padding-bottom:4px}
+  .metric-card{min-width:155px;scroll-snap-align:start}
+  .dashboard-right .premium-card:first-child{order:1}
+  .dashboard-right .premium-card:nth-child(2){order:0}
+  .dashboard-right .premium-card:nth-child(3){order:2}
+  .planning-hero{padding:10px!important}
+  .premium-head{align-items:flex-start;flex-direction:column}
+  .hero-actions{width:100%;overflow-x:auto;flex-wrap:nowrap;padding-bottom:3px}
+  .hero-actions>*{flex:0 0 auto}
+  .dashboard-team-schedule{margin-left:-4px;margin-right:-4px}
+  dialog{max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 12px)!important}
+}
+@media(max-width:620px){
+  .working-hours-editor{gap:6px}
+  .wh-row{grid-template-columns:1fr 92px 92px;gap:7px}
+  .wh-day{grid-column:1/2}
+  .wh-active{grid-column:2/4;justify-self:end}
+  .wh-row input[type="time"]{min-width:0;width:100%}
+  .mobile-quick-actions{position:sticky;top:70px;z-index:15;background:rgba(245,247,251,.92);backdrop-filter:blur(10px);padding:4px 0}
+}

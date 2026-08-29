@@ -7,7 +7,10 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=072" />
+  <link rel="manifest" href="manifest.webmanifest?v=080" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="stylesheet" href="styles.css?v=080" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -23,7 +26,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.7.2 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.8.0 · prête.</div>
     </section>
   </main>
 
@@ -43,6 +46,7 @@
         <button class="side-link active" data-view="dashboard"><span>⌂</span>Tableau de bord</button>
         <button class="side-link" data-view="agenda"><span>▣</span>Mon agenda</button>
         <button class="side-link" id="quickCreateEventBtn"><span>＋</span>Créer un rendez-vous</button>
+        <button class="side-link" id="quickAbsenceBtn"><span>☂</span>Déclarer une absence</button>
         <button class="side-link" data-view="team"><span>⌕</span>Recherche de disponibilités</button>
 
         <div class="side-section-title">ÉQUIPE</div>
@@ -94,6 +98,11 @@
 
       <main class="dashboard-main safe-bottom">
         <section id="dashboardPanel" class="main-view">
+          <div class="mobile-quick-actions">
+            <button id="mobileCreateEventBtn" class="mobile-action primary"><span>＋</span><strong>Rendez-vous</strong></button>
+            <button id="mobileAbsenceBtn" class="mobile-action"><span>☂</span><strong>Absence</strong></button>
+            <button id="mobileSearchSlotsBtn" class="mobile-action"><span>⌕</span><strong>Disponibilités</strong></button>
+          </div>
           <div class="metric-grid">
             <article class="metric-card metric-purple">
               <div class="metric-icon">👥</div>
@@ -261,6 +270,12 @@
               <option value="7">7 jours</option>
             </select>
           </label>
+          <label>Type
+            <select id="teamEventTypeFilter"><option value="">Tous les types</option></select>
+          </label>
+          <label>Statut
+            <select id="teamEventStatusFilter"><option value="">Tous</option><option value="confirmed">Confirmé</option><option value="tentative">Provisoire</option><option value="cancelled">Annulé</option></select>
+          </label>
           <label>Détail
             <select id="teamDetailMode">
               <option value="detailed" selected>Détaillé</option>
@@ -361,6 +376,17 @@
           <div class="card-head"><h3>Mon compte</h3></div>
           <div id="myAccountSummary" class="account-summary"></div>
         </article>
+        <article class="card working-hours-card">
+          <div class="card-head">
+            <div><h3>Horaires individuels</h3><p class="muted admin-note">Utilisés par la recherche de disponibilités.</p></div>
+          </div>
+          <label id="workingHoursUserWrap" hidden>Utilisateur
+            <select id="workingHoursUser"></select>
+          </label>
+          <div id="workingHoursEditor" class="working-hours-editor"></div>
+          <button id="saveWorkingHoursBtn" class="primary">Enregistrer les horaires</button>
+          <p id="workingHoursStatus" class="muted"></p>
+        </article>
       </div>
     </section>
         <section id="adminPanel" class="panel safe-bottom main-view" hidden>
@@ -430,6 +456,35 @@
     </div>
   </div>
 </div>
+
+<dialog id="absenceDialog">
+  <form id="absenceForm" class="stack dialog-card">
+    <div class="dialog-title-row">
+      <div><p class="eyebrow">Planning</p><h2>Déclarer une absence</h2></div>
+      <button type="button" id="closeAbsenceDialogBtn" class="icon-btn">×</button>
+    </div>
+    <label id="absenceOwnerWrap">Calendrier de
+      <select id="absenceOwner"></select>
+    </label>
+    <label>Motif
+      <select id="absenceType"></select>
+    </label>
+    <label>Titre
+      <input id="absenceTitle" value="Absence" maxlength="160" required />
+    </label>
+    <div class="two-cols">
+      <label>Du<input id="absenceStart" type="date" required /></label>
+      <label>Au<input id="absenceEnd" type="date" required /></label>
+    </div>
+    <label>Commentaire<textarea id="absenceDescription" rows="3"></textarea></label>
+    <p id="absenceError" class="error" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" id="cancelAbsenceBtn" class="ghost">Annuler</button>
+      <button type="submit" class="primary">Enregistrer l’absence</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="eventDialog" class="wide">
     <form id="eventForm" class="stack dialog-card">
       <div class="dialog-title-row">
@@ -559,7 +614,7 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=072"></script>
+  <script type="module" src="app.js?v=080"></script>
 
   <dialog id="eventTypeDialog">
     <form id="eventTypeForm" class="stack dialog-card">
