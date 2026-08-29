@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=051';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=052';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -27,7 +27,7 @@ let schedulingSettings = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.5.1 · ${message}`;
+  if (box) box.textContent = `Version 0.5.2 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -703,6 +703,152 @@ function renderTeamSchedule(ids,start,days) {
     openNewEvent(a,cell.dataset.teamUser);
   }));
 }
+
+function hmToMinutes(value){
+  const [h,m]=String(value||'00:00').split(':').map(Number);
+  return h*60+(m||0);
+}
+function isoDay(date){
+  const d=date.getDay();
+  return d===0?7:d;
+}
+function atMinutes(day,mins){
+  const d=new Date(day);
+  d.setHours(Math.floor(mins/60),mins%60,0,0);
+  return d;
+}
+function overlaps(aStart,aEnd,bStart,bEnd){ return aStart < bEnd && aEnd > bStart; }
+
+async function getUserBusySlots(userId,start,end){
+  // On lit les événements avec all_day, car get_busy_slots() ne transporte
+  // que starts_at / ends_at et ne permet donc pas de savoir qu'une journée
+  // doit être bloquée entièrement.
+  const ownedRes=await supabase
+    .from('events')
+    .select('id,starts_at,ends_at,all_day,status')
+    .eq('owner_id',userId)
+    .neq('status','cancelled')
+    .lt('starts_at',end.toISOString())
+    .gt('ends_at',start.toISOString());
+
+  if(ownedRes.error)throw ownedRes.error;
+
+  const partRes=await supabase
+    .from('event_participants')
+    .select('event_id,participation_status')
+    .eq('user_id',userId)
+    .neq('participation_status','declined');
+
+  if(partRes.error)throw partRes.error;
+
+  const eventIds=[...new Set((partRes.data||[]).map(x=>x.event_id))];
+  let participantEvents=[];
+
+  if(eventIds.length){
+    const evRes=await supabase
+      .from('events')
+      .select('id,starts_at,ends_at,all_day,status')
+      .in('id',eventIds)
+      .neq('status','cancelled')
+      .lt('starts_at',end.toISOString())
+      .gt('ends_at',start.toISOString());
+
+    if(evRes.error)throw evRes.error;
+    participantEvents=evRes.data||[];
+  }
+
+  const byId=new Map();
+  [...(ownedRes.data||[]),...participantEvents].forEach(ev=>byId.set(ev.id,ev));
+
+  return [...byId.values()].map(ev=>{
+    const rawStart=new Date(ev.starts_at);
+    const rawEnd=new Date(ev.ends_at);
+
+    if(ev.all_day){
+      // Une "journée entière" bloque réellement toute la ou les journées
+      // couvertes, même si les heures internes du rendez-vous sont 08:15-09:15.
+      const busyStart=new Date(rawStart);
+      busyStart.setHours(0,0,0,0);
+
+      const busyEnd=new Date(rawEnd);
+      busyEnd.setHours(0,0,0,0);
+
+      // Si début et fin sont le même jour, on bloque jusqu'au lendemain.
+      if(busyEnd <= busyStart){
+        busyEnd.setDate(busyStart.getDate()+1);
+      } else if(
+        rawEnd.getHours()!==0 || rawEnd.getMinutes()!==0 ||
+        rawEnd.getSeconds()!==0 || rawEnd.getMilliseconds()!==0
+      ){
+        // Si la fin porte une heure quelconque, la journée de fin est aussi bloquée.
+        busyEnd.setDate(busyEnd.getDate()+1);
+      }
+
+      return {start:busyStart,end:busyEnd,all_day:true};
+    }
+
+    return {start:rawStart,end:rawEnd,all_day:false};
+  });
+}
+
+async function computeCommonSlots(ids,start,end,duration,step,maxResults=20){
+  const [whRes,setRes,...busyLists]=await Promise.all([
+    supabase.from('working_hours').select('user_id,day_of_week,start_time,end_time,is_active').in('user_id',ids).eq('is_active',true),
+    supabase.from('scheduling_settings').select('*').eq('id',1).maybeSingle(),
+    ...ids.map(id=>getUserBusySlots(id,start,end))
+  ]);
+  if(whRes.error)throw whRes.error;
+  if(setRes.error)throw setRes.error;
+
+  const settings=setRes.data||{};
+  const defStart=hmToMinutes(settings.default_day_start||'08:00');
+  const defEnd=hmToMinutes(settings.default_day_end||'18:00');
+  const lunchStart=hmToMinutes(settings.lunch_start||'12:00');
+  const lunchEnd=hmToMinutes(settings.lunch_end||'14:00');
+  const excludeLunch=settings.exclude_lunch!==false;
+
+  const whByUser=new Map(ids.map(id=>[id,[]]));
+  (whRes.data||[]).forEach(r=>whByUser.get(r.user_id)?.push(r));
+  const busyByUser=new Map(ids.map((id,i)=>[id,busyLists[i]||[]]));
+
+  const results=[];
+  const day=new Date(start);
+  day.setHours(0,0,0,0);
+
+  while(day<=end && results.length<maxResults){
+    const dow=isoDay(day);
+    const userWindows=ids.map(id=>{
+      const all=whByUser.get(id)||[];
+      const custom=all.filter(r=>Number(r.day_of_week)===dow)
+        .map(r=>({start:hmToMinutes(r.start_time),end:hmToMinutes(r.end_time)}));
+      const windows=all.length ? custom : ((dow>=1&&dow<=5)?[{start:defStart,end:defEnd}]:[]);
+      return {id,windows};
+    });
+
+    const everyHasWork=userWindows.every(x=>x.windows.length>0);
+    if(everyHasWork){
+      const scanStart=Math.max(...userWindows.map(x=>Math.min(...x.windows.map(w=>w.start))));
+      const scanEnd=Math.min(...userWindows.map(x=>Math.max(...x.windows.map(w=>w.end))));
+
+      for(let mins=scanStart;mins+duration<=scanEnd && results.length<maxResults;mins+=step){
+        const slotStart=atMinutes(day,mins);
+        const slotEnd=new Date(slotStart.getTime()+duration*60000);
+        if(slotStart<start || slotEnd>end || slotStart<new Date())continue;
+        if(excludeLunch && overlaps(mins,mins+duration,lunchStart,lunchEnd))continue;
+
+        let ok=true;
+        for(const {id,windows} of userWindows){
+          if(!windows.some(w=>mins>=w.start && mins+duration<=w.end)){ok=false;break;}
+          if((busyByUser.get(id)||[]).some(b=>overlaps(slotStart,slotEnd,b.start,b.end))){ok=false;break;}
+        }
+        if(ok)results.push({slot_start:slotStart.toISOString(),slot_end:slotEnd.toISOString()});
+      }
+    }
+    day.setDate(day.getDate()+1);
+  }
+  return results;
+}
+
 
 async function searchSlots(e) {
   e.preventDefault();
