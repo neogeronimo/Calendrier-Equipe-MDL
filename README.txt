@@ -1,33 +1,27 @@
-CALENDRIER ÉQUIPE MDL v0.5.2
+CALENDRIER ÉQUIPE MDL v0.5.3
 
-CORRECTIF RECHERCHE DE DISPONIBILITÉS
+AJOUT : PLANIFICATION ET RECHERCHE PAR GROUPE
 
-Erreur corrigée :
-Recherche impossible : computeCommonSlots is not defined
-
-Cause :
-Lors du gros lot v0.5.0 / v0.5.1, le moteur de calcul précis des disponibilités
-de la v0.4.2 n'a pas été conservé dans app.js.
-
-Correction :
-- restauration du moteur validé de v0.4.2 ;
-- prise en compte des rendez-vous propriétaires ;
-- prise en compte des rendez-vous participants ;
-- journées entières bloquantes ;
-- horaires personnalisés ;
-- horaires par défaut ;
-- pause déjeuner ;
-- jours non travaillés ;
-- créneaux déjà passés.
+NOUVEAUTÉS
+- Le planning équipe peut désormais être filtré directement par groupe.
+- Nouveau mode "Sélectionner tout le groupe".
+- Cartes de groupes avec nombre de techniciens.
+- Bouton "Afficher" pour filtrer rapidement un groupe.
+- Bouton "Sélectionner le groupe" pour charger tous ses techniciens d'un coup.
+- La recherche de disponibilités peut maintenant travailler :
+  * sur les techniciens cochés,
+  * OU directement sur un groupe entier.
+- La création d'une réunion depuis une disponibilité de groupe sélectionne
+  automatiquement tous les techniciens actifs du groupe comme participants.
+- Les groupes restent configurables depuis l'administration.
 
 INSTALLATION
 Aucun SQL.
 Aucune Edge Function.
 
-GitHub :
-- remplacer index.html
-- remplacer app.js
-
-styles.css peut rester celui de v0.5.1.
+Sur GitHub remplacer :
+- index.html
+- app.js
+- styles.css
 
 Puis attendre GitHub Pages et faire Ctrl+F5.

@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=052';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js?v=053';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -27,7 +27,7 @@ let schedulingSettings = null;
 
 function setStatus(message) {
   const box = $('loginStatus');
-  if (box) box.textContent = `Version 0.5.2 · ${message}`;
+  if (box) box.textContent = `Version 0.5.3 · ${message}`;
   console.log('[Calendrier MDL]', message);
 }
 function showLoginError(message) { $('loginError').textContent = message; $('loginError').hidden = false; }
@@ -478,21 +478,68 @@ function exportAgendaXlsx(){
 function exportAgendaCsv(){exportRowsCsv(eventRows(filteredCalendarEvents(),profileName(currentProfile)),`Agenda-${toDateInput(cursorDate)}.csv`);}
 function exportAgendaIcs(){downloadText(`Agenda-${toDateInput(cursorDate)}.ics`,eventsToIcs(filteredCalendarEvents(),`Agenda ${profileName(currentProfile)}`),'text/calendar;charset=utf-8');}
 
+
+function techniciansInGroup(groupId){
+  if(!groupId)return profiles.filter(p=>p.is_active!==false && p.role==='technicien');
+  const ids=new Set(memberships.filter(m=>m.group_id===groupId).map(m=>m.user_id));
+  return profiles.filter(p=>p.is_active!==false && p.role==='technicien' && ids.has(p.id));
+}
+function selectGroupTechnicians(groupId,replace=true){
+  const users=techniciansInGroup(groupId);
+  if(replace)teamSelectedIds.clear();
+  users.forEach(p=>teamSelectedIds.add(p.id));
+  renderTeamUsers();
+}
+function renderGroupOverview(){
+  const host=$('groupOverview');
+  if(!host)return;
+  const visibleGroups=groups.filter(g=>g.is_active!==false);
+  host.innerHTML=visibleGroups.length?visibleGroups.map(g=>{
+    const count=techniciansInGroup(g.id).length;
+    return `<article class="group-card">
+      <div class="group-card-head">
+        <div><h4>${escapeHtml(g.name)}</h4><div class="muted">${escapeHtml(g.description||'')}</div></div>
+        <span class="group-count">${count}</span>
+      </div>
+      <div class="group-card-actions">
+        <button class="ghost" data-group-filter="${g.id}">Afficher</button>
+        <button class="small-btn" data-group-select="${g.id}">Sélectionner le groupe</button>
+      </div>
+    </article>`;
+  }).join(''):'';
+
+  host.querySelectorAll('[data-group-filter]').forEach(btn=>btn.addEventListener('click',async()=>{
+    $('teamGroupFilter').value=btn.dataset.groupFilter;
+    $('teamGroupMode').value='filter';
+    teamSelectedIds.clear();
+    renderTeamUsers();
+    await refreshTeamSchedule();
+  }));
+  host.querySelectorAll('[data-group-select]').forEach(btn=>btn.addEventListener('click',async()=>{
+    $('teamGroupFilter').value=btn.dataset.groupSelect;
+    $('teamGroupMode').value='select_all';
+    selectGroupTechnicians(btn.dataset.groupSelect,true);
+    await refreshTeamSchedule();
+  }));
+}
 function populateTeamFilters() {
-  $('teamGroupFilter').innerHTML='<option value="">Tous les groupes</option>'+groups.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+  const groupOptions=groups.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+  $('teamGroupFilter').innerHTML='<option value="">Tous les groupes</option>'+groupOptions;
+  $('slotGroupFilter').innerHTML='<option value="">Techniciens sélectionnés</option>'+groupOptions;
   const now=new Date();
   $('teamDate').value=toDateInput(now);
   $('slotStartDate').value=toDateInput(now);
   $('slotEndDate').value=toDateInput(addDays(now,7));
+  renderGroupOverview();
 }
 
 function renderTeamUsers() {
   const groupId=$('teamGroupFilter').value;
-  let users=profiles.filter(p=>p.is_active!==false && p.role==='technicien');
+  const mode=$('teamGroupMode')?.value||'filter';
+  let users=techniciansInGroup(groupId);
 
-  if(groupId){
-    const ids=new Set(memberships.filter(m=>m.group_id===groupId).map(m=>m.user_id));
-    users=users.filter(p=>ids.has(p.id));
+  if(groupId && mode==='select_all'){
+    users.forEach(p=>teamSelectedIds.add(p.id));
   }
 
   $('teamUsers').innerHTML=users.length ? users.map(p=>{
@@ -501,7 +548,7 @@ function renderTeamUsers() {
       <input type="checkbox" value="${p.id}" class="team-user-check" ${checked?'checked':''}>
       <span><strong>${escapeHtml(profileName(p))}</strong><small>${escapeHtml(groupNamesForUser(p.id).join(', ')||'Technicien')}</small></span>
     </label>`;
-  }).join('') : '<div class="empty">Aucun technicien dans ce filtre.</div>';
+  }).join('') : '<div class="empty">Aucun technicien dans ce groupe.</div>';
 
   document.querySelectorAll('.team-user-check').forEach(cb=>cb.addEventListener('change',async()=>{
     if(cb.checked)teamSelectedIds.add(cb.value);else teamSelectedIds.delete(cb.value);
@@ -852,8 +899,9 @@ async function computeCommonSlots(ids,start,end,duration,step,maxResults=20){
 
 async function searchSlots(e) {
   e.preventDefault();
-  const ids=selectedTeamIds();
-  if(!ids.length){showToast('Sélectionne au moins un technicien.');return;}
+  const slotGroupId=$('slotGroupFilter').value;
+  const ids=slotGroupId ? techniciansInGroup(slotGroupId).map(p=>p.id) : selectedTeamIds();
+  if(!ids.length){showToast(slotGroupId?'Ce groupe ne contient aucun technicien actif.':'Sélectionne au moins un technicien.');return;}
 
   const start=new Date(`${$('slotStartDate').value}T00:00:00`);
   const end=new Date(`${$('slotEndDate').value}T23:59:59`);
@@ -869,8 +917,9 @@ async function searchSlots(e) {
     }
 
     const names=ids.map(id=>profiles.find(p=>p.id===id)).filter(Boolean).map(profileName);
+    const scopeLabel=slotGroupId ? `groupe ${groups.find(g=>g.id===slotGroupId)?.name||''}` : names.join(', ');
     $('slotResults').innerHTML=
-      `<div class="availability-meta">Calcul pour <strong>${escapeHtml(names.join(', '))}</strong> : rendez-vous propriétaires + participations + horaires de travail + pause déjeuner.</div>`+
+      `<div class="availability-meta">Calcul pour <strong>${escapeHtml(scopeLabel)}</strong> : rendez-vous propriétaires + participations + horaires de travail + pause déjeuner.</div>`+
       data.map((s,i)=>{
         const a=new Date(s.slot_start),b=new Date(s.slot_end);
         return `<div class="slot-card"><div>
@@ -1327,8 +1376,22 @@ $('cancelEventTypeBtn').addEventListener('click',()=>$('eventTypeDialog').close(
 $('eventTypeForm').addEventListener('submit',saveEventTypeAdmin);
 $('deleteEventTypeBtn').addEventListener('click',deleteEventTypeAdmin);
 $('schedulingForm').addEventListener('submit',saveSchedulingSettings);
-$('teamGroupFilter').addEventListener('change',async()=>{teamSelectedIds.clear();renderTeamUsers();await refreshTeamSchedule();});
-$('refreshTeamBtn').addEventListener('click',async()=>{await loadReferenceData();renderTeamUsers();await refreshTeamSchedule();});
+$('teamGroupFilter').addEventListener('change',async()=>{
+  const groupId=$('teamGroupFilter').value;
+  const mode=$('teamGroupMode').value;
+  teamSelectedIds.clear();
+  if(groupId && mode==='select_all') selectGroupTechnicians(groupId,true);
+  else renderTeamUsers();
+  await refreshTeamSchedule();
+});
+$('teamGroupMode').addEventListener('change',async()=>{
+  const groupId=$('teamGroupFilter').value;
+  teamSelectedIds.clear();
+  if(groupId && $('teamGroupMode').value==='select_all') selectGroupTechnicians(groupId,true);
+  else renderTeamUsers();
+  await refreshTeamSchedule();
+});
+$('refreshTeamBtn').addEventListener('click',async()=>{await loadReferenceData();renderGroupOverview();renderTeamUsers();await refreshTeamSchedule();});
 $('teamTodayBtn').addEventListener('click',async()=>{$('teamDate').value=toDateInput(new Date());await refreshTeamSchedule();});
 $('teamDate').addEventListener('change',refreshTeamSchedule);
 $('teamRange').addEventListener('change',refreshTeamSchedule);

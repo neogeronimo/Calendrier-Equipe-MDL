@@ -261,3 +261,39 @@ input,select,textarea{
   .team-filter-row{grid-template-columns:1fr}
   .team-filter-row label:first-child,.team-quick-actions{grid-column:auto}
 }
+
+
+/* v0.5.3 — planification par groupe */
+.group-overview{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:10px;
+  margin:0 0 16px;
+}
+.group-card{
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:12px;
+  background:#fff;
+  display:grid;
+  gap:8px;
+}
+.group-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.group-card h4{margin:0;font-size:.95rem}
+.group-card .muted{font-size:.78rem}
+.group-card-actions{display:flex;gap:7px;flex-wrap:wrap}
+.group-card-actions button{flex:1}
+.group-count{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:28px;
+  height:28px;
+  border-radius:999px;
+  background:var(--primary-soft);
+  font-size:.78rem;
+  font-weight:900;
+}
+@media(max-width:950px){
+  .team-filter-row{grid-template-columns:1fr 1fr!important}
+}

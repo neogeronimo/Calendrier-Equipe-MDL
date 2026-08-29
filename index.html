@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light" />
   <title>Calendrier Équipe MDL</title>
   <link rel="icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=052" />
+  <link rel="stylesheet" href="styles.css?v=053" />
 </head>
 <body>
   <div id="toast" class="toast" hidden></div>
@@ -23,7 +23,7 @@
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <div id="loginStatus" class="login-status">Version 0.5.2 · prête.</div>
+      <div id="loginStatus" class="login-status">Version 0.5.3 · prête.</div>
     </section>
   </main>
 
@@ -102,6 +102,12 @@
           <label>Groupe
             <select id="teamGroupFilter"><option value="">Tous les groupes</option></select>
           </label>
+          <label>Mode groupe
+            <select id="teamGroupMode">
+              <option value="filter" selected>Filtrer la liste</option>
+              <option value="select_all">Sélectionner tout le groupe</option>
+            </select>
+          </label>
           <label>Date
             <input id="teamDate" type="date" />
           </label>
@@ -127,6 +133,7 @@
         <div id="teamUsers" class="check-list team-user-grid"></div>
       </div>
 
+      <div id="groupOverview" class="group-overview"></div>
       <div class="team-workspace">
         <article class="card team-planning-card">
           <div class="card-head">
@@ -145,6 +152,9 @@
         <article class="card common-slot-card">
           <div class="card-head"><h3>Trouver un créneau commun</h3></div>
           <form id="slotSearchForm" class="stack compact-stack">
+            <label>Rechercher pour
+              <select id="slotGroupFilter"><option value="">Techniciens sélectionnés</option></select>
+            </label>
             <div class="two-cols">
               <label>Du<input id="slotStartDate" type="date" required /></label>
               <label>Au<input id="slotEndDate" type="date" required /></label>
@@ -392,7 +402,7 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=052"></script>
+  <script type="module" src="app.js?v=053"></script>
 
   <dialog id="eventTypeDialog">
     <form id="eventTypeForm" class="stack dialog-card">
